@@ -8,3 +8,4 @@ node_modules/
 artifacts/
 .DS_Store
 .vercel
+next-env.d.ts

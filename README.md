@@ -2,6 +2,8 @@
 
 A public product website and private QA workspace for [QA-testbot](https://github.com/Vaidehi2510/QA-testbot). Inspect pull requests, choose OpenRouter or local models, and see required-check scores, blockers, findings, and suggested fixes in one place.
 
+[Visit Patchsentry](https://patchsentry.vercel.app) · [Explore the demo](https://patchsentry.vercel.app/demo) · [Integration guide](https://patchsentry.vercel.app/docs)
+
 The website is the control and reporting interface. The separate QA engine executes checks on a trusted runner. It can read product source and publish PR comments, labels, and statuses; it never edits, pushes, or merges product code.
 
 ## What is implemented
@@ -65,6 +67,8 @@ Deploy this repository as a Next.js application. Vercel configuration is detecte
 Run `npm run db:migrate` with these variables exported, then deploy. Migrations do not run during ordinary API requests. Production fails closed if persistent account storage is unavailable; the public product site and demo remain available.
 
 Never deploy with `PGLITE_DATA_DIR`. Vercel serverless disk is not a persistent database. Keep preview deployments separate from production data and configure their own exact auth origin when enabling accounts there.
+
+Deploy from the CLI with `npx vercel deploy --prod`. Automatic deployments from GitHub require connecting the GitHub account in Vercel’s login connections and linking this repository. `.vercelignore` excludes all local environment files, development databases, and test artifacts from CLI uploads. Set `SITE_URL` if using a different public domain.
 
 Free hosting/database tiers have limits. Vercel Hobby is restricted to personal, noncommercial use; review the [current plan terms](https://vercel.com/docs/plans/hobby) before a commercial launch. This repository contains no billing integration or automatic paid-tier upgrade.
 
