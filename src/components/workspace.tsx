@@ -499,7 +499,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                         <section className="panel team-panel">
                           <span className="mini-label">YOUR QA TEAM</span>
                           <h2>
-                            Five perspectives.
+                            Five perspectives.{" "}
                             <br />
                             One clear report.
                           </h2>
