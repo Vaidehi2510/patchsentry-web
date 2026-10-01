@@ -13,7 +13,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T { const result = sche
 function view(row: Row): Job { return { ...row.payload, status: row.status, attempts: row.attempts, createdAt: iso(row.created_at), updatedAt: iso(row.updated_at), leaseExpiresAt: row.lease_expires_at ? iso(row.lease_expires_at) : null, message: row.message, recordId: row.record_id }; }
 async function transaction<T>(database: Database, projectId: string, action: (q: Database["query"]) => Promise<T>) {
   const c = await database.connect();
-  try { await c.query("BEGIN"); await c.query("SELECT id FROM projects WHERE id = $1 FOR UPDATE", [projectId]); const result = await action(c.query); await c.query("COMMIT"); return result; }
+  try { await c.query("BEGIN"); await c.query("SELECT id FROM projects WHERE id = $1 FOR UPDATE", [projectId]); const result = await action(c.query.bind(c)); await c.query("COMMIT"); return result; }
   catch (error) { await c.query("ROLLBACK"); throw error; } finally { c.release(); }
 }
 async function expire(q: Database["query"], projectId: string) {

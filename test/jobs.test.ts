@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createPGliteDatabase } from '../src/lib/server/database';
+import { createPGliteDatabase, type Database } from '../src/lib/server/database';
 import { createAuth, migrateDatabase } from '../src/lib/server/auth';
 import { handleRequest } from '../src/lib/server/api';
 import type { Runtime } from '../src/lib/server/runtime';
@@ -46,6 +46,53 @@ test('testing profiles reject commands, external path escapes, incomplete assert
   assert.equal(TestingProfileSchema.safeParse({ ...profile, goals: { ...profile.goals, goals: [{ ...profile.goals.goals[0], assertions: Array.from({ length: 9 }, (_, i) => ({ id: `assertion-${i}`, action: 'expectVisible', selector: 'body' })) }] } }).success, false);
   assert.equal(TestingProfileSchema.safeParse({ ...profile, goals: { ...profile.goals, goals: [{ ...profile.goals.goals[0], assertions: [{ id: 'mixed', action: 'expectUrl', path: '/', selector: 'body' }] }] } }).success, false);
   assert.equal(runnerOnline(new Date(Date.now() - 100_000).toISOString()), false);
+});
+
+test('job API preserves PostgreSQL client receivers across transaction commit and rollback', async () => {
+  const p = await project();
+  const transactions: string[] = [];
+  const database: Database = {
+    options: runtime.database.options,
+    query: runtime.database.query.bind(runtime.database),
+    end: runtime.database.end.bind(runtime.database),
+    async connect() {
+      const connection = await runtime.database.connect();
+      const client: Awaited<ReturnType<Database['connect']>> = {
+        async query<Row>(this: unknown, sql: string, values?: readonly unknown[]) {
+          assert.equal(this, client, 'PostgreSQL query requires its client receiver');
+          transactions.push(sql.trim().split(/\s+/)[0]);
+          return connection.query<Row>(sql, values);
+        },
+        release() { assert.equal(this, client); connection.release(); }
+      };
+      return client;
+    }
+  };
+  const guarded = { ...runtime, database };
+  async function post(endpoint: string, body: unknown, token?: string) {
+    return handleRequest(new Request(config.origin + endpoint, { method: 'POST', headers: { origin: config.origin, 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : { cookie: alice }) }, body: JSON.stringify(body) }), guarded);
+  }
+  // PGlite's query is a closure; explicitly retain pg Client's receiver-sensitive
+  // method behavior while exercising the real database and authenticated API.
+  const client = await database.connect();
+  try { const detached = client.query; await assert.rejects(detached('SELECT 1'), /requires its client receiver/); }
+  finally { client.release(); }
+  const body = input();
+  const queued = await post(`/api/projects/${p.id}/jobs`, body);
+  assert.equal(queued.status, 201, JSON.stringify(await queued.clone().json()));
+  const job = (await queued.json()).job;
+  const stored = await runtime.database.query<{ id: string }>('SELECT id FROM qa_jobs WHERE id=$1 AND project_id=$2', [job.id, p.id]);
+  assert.equal(stored.rows[0].id, job.id);
+  assert.equal((await post(`/api/projects/${p.id}/jobs`, { ...body, prNumber: 43 })).status, 409);
+  const claimed = await post('/api/agent/jobs/claim', { runnerId: runner.id }, p.token);
+  assert.equal(claimed.status, 200);
+  const execution = await claimed.json(); assert.equal(execution.job.id, job.id);
+  assert.equal((await post(`/api/agent/jobs/${job.id}/lease`, lease(execution), p.token)).status, 200);
+  assert.equal((await post(`/api/agent/jobs/${job.id}/complete`, { ...lease(execution), status: 'blocked', message: 'Synthetic runner unavailable.' }, p.token)).status, 200);
+  assert.equal((await post(`/api/projects/${p.id}/jobs/${job.id}/retry`, {})).status, 200);
+  assert.equal((await post(`/api/projects/${p.id}/jobs/${job.id}/cancel`, {})).status, 200);
+  assert.ok(transactions.includes('ROLLBACK'));
+  assert.ok(transactions.filter(command => command === 'COMMIT').length >= 6);
 });
 
 test('unconfigured or offline requests are durably blocked and never claimable', async () => {
