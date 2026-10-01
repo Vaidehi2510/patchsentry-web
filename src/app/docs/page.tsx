@@ -251,10 +251,10 @@ npm run dashboard`}</code>
               <code>{`export QA_PORTAL_URL="https://your-patchsentry-site.example"
 node scripts/agent.mjs \\
   --bot-dir /path/to/QA-testbot \\
-  --watch --apply-model-settings`}</code>
+  --watch --execute-jobs --runner-policy portal-policy.json`}</code>
             </pre>
             <p>
-              The connector makes outbound requests and uploads bounded report
+              Create a local portal-policy.json, install the chosen browsers, enable the model locally, and run --check-runner first. Then save trusted goals in Testing setup and request a full commit SHA from the dashboard. The connector claims enrolled jobs and uploads bounded report
               summaries. It does not run PR code on the web server. Model
               settings synchronization is opt-in; changing backends or enabling
               image sharing also requires enrollment on the runner. Keep model

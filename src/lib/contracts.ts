@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Runner, TestingProfile } from "./jobs";
 
 export const roles = [
   "planner",
@@ -187,6 +188,8 @@ export type Project = {
   agentLastSeen: string | null;
   localModels: LocalModel[];
   tokenConfigured?: boolean;
+  testingProfile?: TestingProfile;
+  runner?: Runner | null;
 };
 export type Run = RunInput & { score: Score; receivedAt: string };
 export type CatalogModel = {

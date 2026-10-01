@@ -34,14 +34,16 @@ import {
 import type { Project, Run, RunStatus, Settings } from "@/lib/contracts";
 import { demoProject, demoRuns } from "@/lib/demo";
 import { ModelSettings } from "./model-settings";
+import { TestingSetup, JobQueue, RunnerStatus } from "./testing-setup";
 import "./workspace.css";
 
-type Tab = "overview" | "runs" | "models" | "integration";
+type Tab = "overview" | "runs" | "models" | "testing" | "integration";
 type User = { id: string; name: string; email: string };
 const nav = [
   { id: "overview" as Tab, label: "Overview", icon: LayoutDashboard },
   { id: "runs" as Tab, label: "PR reports", icon: GitPullRequest },
   { id: "models" as Tab, label: "Models & agents", icon: SlidersHorizontal },
+  { id: "testing" as Tab, label: "Testing setup", icon: FileCode2 },
   { id: "integration" as Tab, label: "Integrations", icon: Plug },
 ];
 const statusLabels: Record<RunStatus, string> = {
@@ -179,6 +181,11 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       setBusy(false);
     }
   }
+  useEffect(() => {
+    if (demo || !projectId) return;
+    const timer = setInterval(() => { void refresh(); }, 30000);
+    return () => clearInterval(timer);
+  }, [demo, projectId]);
   async function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
@@ -446,6 +453,8 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                 />
               ) : (
                 <>
+                  {(tab === "overview" || tab === "runs") && <JobQueue key={project.id} project={project} demo={demo} runs={runs} openRun={setSelected} refresh={refresh} />}
+                  {tab === "testing" && <TestingSetup key={project.id} project={project} demo={demo} onSaved={value => setProjects(items => items.map(p => p.id === value.id ? value : p))} />}
                   {tab === "overview" && (
                     <>
                       <div className="stat-grid">
@@ -1048,6 +1057,7 @@ function Integration({
   return (
     <div className="integration-layout">
       <section className="panel integration-main">
+        <RunnerStatus project={project} />
         <div className="panel-heading">
           <div>
             <span className="mini-label">YOUR PRODUCT</span>
@@ -1089,7 +1099,7 @@ function Integration({
             <div>
               <h3>Create a runner token</h3>
               <p>
-                This project-scoped token lets your runner read model settings
+                This project-scoped token lets your runner read settings, claim enrolled jobs,
                 and upload reports. Save it as a secret on the runner.
               </p>
               {demo ? (
@@ -1166,13 +1176,16 @@ function Integration({
           <article>
             <span className="step-number">3</span>
             <div>
-              <h3>Start the outbound connector</h3>
+              <h3>Enroll your local runner</h3>
+              <p>Create <code>portal-policy.json</code> in the separate bot checkout. Adjust the product path and preview origin, install the selected browsers, and enable the model locally. This website does not provision runner infrastructure.</p>
+              <details><summary>Show a conservative local enrollment policy</summary><pre className="code-block"><code>{JSON.stringify({ schemaVersion: 1, repository: project.repository, repoCheckout: "/ABSOLUTE/path/to/product", base: project.testingProfile?.baseRef || "main", allowedPreviewOrigins: ["https://pr-{pr}.preview.example"], allowedBrowsers: ["chromium"], allowedBackends: [project.settings.backend], maxPages: 4, maxGoals: 8, maxAssertions: 30, maxCostUsd: project.settings.maxCostUsd, maxCallsPerRun: project.settings.maxCallsPerRun, allowImages: false, allowMutations: false, allowSemanticMaintenance: false, executeBaseline: false, timeoutMs: 900000, configPath: "qa-config.json", regressionDir: ".qa-regressions" }, null, 2)}</code></pre></details>
+              <p>Run the offline prerequisite check first:</p><pre className="code-block"><code>{`node scripts/agent.mjs --bot-dir /path/to/QA-testbot --execute-jobs --runner-policy portal-policy.json --check-runner`}</code></pre>
               <p>
                 Clone the website repository on your trusted runner. Set{" "}
                 <code>QA_PORTAL_TOKEN</code> in its environment, then run:
               </p>
               <pre className="code-block">
-                <code>{`export QA_PORTAL_URL="${origin}"\nnode scripts/agent.mjs \\\n  --bot-dir /path/to/QA-testbot \\\n  --watch --apply-model-settings`}</code>
+                <code>{`export QA_PORTAL_URL="${origin}"\nnode scripts/agent.mjs \\\n  --bot-dir /path/to/QA-testbot \\\n  --watch --execute-jobs --runner-policy portal-policy.json`}</code>
               </pre>
               <p className="fineprint">
                 Keep <code>OPENROUTER_API_KEY</code> or your local model
@@ -1195,9 +1208,10 @@ function Integration({
             <div>
               <h3>Choose the PRs and run QA</h3>
               <p>
-                Configure the bot’s PR scope or trigger a review on your runner.
-                The connector publishes reports here as checks complete. This
-                portal does not execute untrusted PR code on the web server.
+                Save a preview URL, browser engines, and trusted goals in Testing setup.
+                Request QA from Overview using the PR number and full commit SHA.
+                Your enrolled runner claims the job, executes the reviewed engine, and uploads results.
+                Missing prerequisites remain blocked; the web server does not execute product code.
               </p>
               <Link className="text-button" href="/docs">
                 Review the full integration guide <ArrowRight size={14} />

@@ -42,7 +42,7 @@ const stages = [
     number: "03",
     icon: ScanEye,
     title: "Inspect, test, and collect evidence.",
-    text: "The specialists read code and select from configured, trusted checks. Your runner executes test suites and configured browser journeys against a test environment. Browser evidence can include screenshots, accessibility issues, layout checks, and page errors.",
+    text: "The specialists read code and select from configured, trusted checks. After explicit local enrollment, request an exact PR commit from the workspace. A durable job queue sends bounded work to your runner, which executes trusted suites and planned browser journeys against the configured preview. Browser evidence can include screenshots, accessibility issues, layout checks, and page errors.",
     items: [
       "Use a dedicated preview environment with test data for interactive journeys.",
       "Generated test code and suggested fixes remain proposals; the bot does not insert them into your product.",

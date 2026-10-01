@@ -13,6 +13,8 @@ import {
 } from "../contracts";
 import { getRuntime, type Runtime } from "./runtime";
 import { getCatalog } from "./catalog";
+import { RunnerSchema, TestingProfileSchema, testingDefaults, type Runner, type TestingProfile } from "../jobs";
+import { JobError, createJob, listJobs, changeJob, claimJob, updateLease } from "./jobs";
 
 const BODY_LIMIT = 256 * 1024;
 const CreateProject = z
@@ -25,7 +27,7 @@ const CreateProject = z
       .max(201),
   })
   .strict();
-const ChangeProject = z.object({ settings: SettingsSchema }).strict();
+const ChangeProject = z.object({ settings: SettingsSchema.optional(), testingProfile: TestingProfileSchema.optional() }).strict().refine(v => v.settings || v.testingProfile);
 const Heartbeat = z
   .object({
     models: z
@@ -35,6 +37,7 @@ const Heartbeat = z
         (models) => new Set(models.map((m) => m.id)).size === models.length,
         "Duplicate models",
       ),
+    runner: RunnerSchema.optional(),
   })
   .strict();
 type ProjectRow = {
@@ -47,6 +50,8 @@ type ProjectRow = {
   agent_last_seen: Date | string | null;
   local_models: LocalModel[];
   agent_token_hash: string | null;
+  testing_profile?: TestingProfile;
+  runner?: Runner | null;
 };
 
 export class ApiError extends Error {
@@ -79,6 +84,8 @@ function projectView(row: ProjectRow): Project {
     agentLastSeen: row.agent_last_seen ? iso(row.agent_last_seen) : null,
     localModels: row.local_models,
     tokenConfigured: Boolean(row.agent_token_hash),
+    testingProfile: row.testing_profile || testingDefaults,
+    runner: row.runner || null,
   };
 }
 export function requireOrigin(request: Request, origin: string) {
@@ -309,6 +316,7 @@ async function dispatch(
         projectId: project.id,
         repository: project.repository,
         settings: project.settings,
+        testingProfile: project.testing_profile || testingDefaults,
       });
     if (path === "/api/agent/heartbeat" && request.method === "POST") {
       const input = parse(
@@ -316,11 +324,14 @@ async function dispatch(
         sanitize(parse(Heartbeat, await readBody(request))),
       );
       await runtime.database.query(
-        "UPDATE projects SET local_models = $1::jsonb, agent_last_seen = now() WHERE id = $2",
-        [JSON.stringify(input.models), project.id],
+        "UPDATE projects SET local_models = $1::jsonb, agent_last_seen = now(), runner = $3::jsonb WHERE id = $2",
+        [JSON.stringify(input.models), project.id, input.runner ? JSON.stringify(input.runner) : null],
       );
       return json({ ok: true });
     }
+    if (path === "/api/agent/jobs/claim" && request.method === "POST") return json(await claimJob(runtime.database, project, await readBody(request)));
+    const leaseMatch = /^\/api\/agent\/jobs\/([a-f0-9-]{36})\/(lease|complete)$/.exec(path);
+    if (leaseMatch && request.method === "POST") return json(await updateLease(runtime.database, project.id, leaseMatch[1], sanitize(await readBody(request)), leaseMatch[2] === "complete"));
     const runMatch = /^\/api\/agent\/runs\/([a-f0-9]{64})$/.exec(path);
     if (runMatch && request.method === "PUT") {
       const input = parse(RunInputSchema, await readBody(request));
@@ -406,16 +417,24 @@ async function dispatch(
     }
     throw new ApiError(405, "Method not allowed.");
   }
-  const projectMatch =
-    /^\/api\/projects\/([a-f0-9-]{36})(?:\/(token|runs))?$/.exec(path);
+  const jobMatch = /^\/api\/projects\/([a-f0-9-]{36})\/jobs(?:\/([a-f0-9-]{36})\/(retry|cancel))?$/.exec(path);
+  if (jobMatch) {
+    const project = await ownedProject(runtime, jobMatch[1], user.id);
+    if (!jobMatch[2] && request.method === "GET") return json({ jobs: await listJobs(runtime.database, project.id) });
+    if (!jobMatch[2] && request.method === "POST") return json(await createJob(runtime.database, project, await readBody(request)), 201);
+    if (jobMatch[2] && request.method === "POST") return json({ job: await changeJob(runtime.database, project, jobMatch[2], jobMatch[3] as "retry" | "cancel") });
+    throw new ApiError(405, "Method not allowed.");
+  }
+  const projectMatch = /^\/api\/projects\/([a-f0-9-]{36})(?:\/(token|runs))?$/.exec(path);
   if (projectMatch) {
     const project = await ownedProject(runtime, projectMatch[1], user.id);
     if (projectMatch[2] === "token" && request.method === "POST") {
       const token = "pst_" + randomBytes(32).toString("base64url");
       await runtime.database.query(
-        "UPDATE projects SET agent_token_hash = $1, updated_at = now() WHERE id = $2 AND owner_id = $3",
+        "UPDATE projects SET agent_token_hash = $1, runner=NULL, agent_last_seen=NULL, updated_at = now() WHERE id = $2 AND owner_id = $3",
         [hashToken(token), project.id, user.id],
       );
+      await runtime.database.query("UPDATE qa_jobs SET status='blocked', lease_hash=NULL, lease_expires_at=NULL, message='Runner token rotated. Enroll the replacement token before retrying.', updated_at=now() WHERE project_id=$1 AND status='running'", [project.id]);
       return json({ token });
     }
     if (projectMatch[2] === "runs" && request.method === "GET") {
@@ -434,10 +453,10 @@ async function dispatch(
       return json({ project: projectView(project) });
     if (!projectMatch[2] && request.method === "PATCH") {
       const input = parse(ChangeProject, await readBody(request));
-      await validateSettings(input.settings, project, runtime);
+      if (input.settings) await validateSettings(input.settings, project, runtime);
       const result = await runtime.database.query<ProjectRow>(
-        "UPDATE projects SET settings = $1::jsonb, updated_at = now() WHERE id = $2 AND owner_id = $3 RETURNING *",
-        [JSON.stringify(input.settings), project.id, user.id],
+        "UPDATE projects SET settings = $1::jsonb, testing_profile=$4::jsonb, updated_at = now() WHERE id = $2 AND owner_id = $3 RETURNING *",
+        [JSON.stringify(input.settings || project.settings), project.id, user.id, JSON.stringify(input.testingProfile || project.testing_profile || testingDefaults)],
       );
       return json({ project: projectView(result.rows[0]) });
     }
@@ -463,7 +482,7 @@ export async function handleRequest(
       injected === undefined ? await getRuntime() : injected,
     );
   } catch (error) {
-    if (error instanceof ApiError)
+    if (error instanceof ApiError || error instanceof JobError)
       return json({ error: error.message }, error.status);
     // Database credentials, session data and provider payloads must not reach responses.
     return json(

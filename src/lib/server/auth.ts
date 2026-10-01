@@ -107,4 +107,15 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
   await database.query(
     "CREATE INDEX IF NOT EXISTS qa_runs_project_updated_idx ON qa_runs(project_id, updated_at DESC)",
   );
+  await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS testing_profile jsonb");
+  await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS runner jsonb");
+  await database.query(`CREATE TABLE IF NOT EXISTS qa_jobs (
+    id text PRIMARY KEY, project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    dedupe_key text NOT NULL, payload jsonb NOT NULL, status text NOT NULL DEFAULT 'queued',
+    attempts integer NOT NULL DEFAULT 0, runner_id text, lease_hash text, lease_expires_at timestamptz,
+    message text NOT NULL DEFAULT '', record_id text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE(project_id, dedupe_key), CHECK(attempts BETWEEN 0 AND 3),
+    CHECK(status IN ('queued','running','completed','blocked','failed','cancelled'))
+  )`);
+  await database.query("CREATE INDEX IF NOT EXISTS qa_jobs_project_queue_idx ON qa_jobs(project_id, status, created_at)");
 }

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-/** Outbound-only bridge. No source checkout, model execution, or GitHub mutation. */
+/** Outbound connector. Explicit enrollment enables the fixed local QA bridge; no GitHub mutation. */
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { prepareRunner, runClaimedJob } from "./runner.mjs";
 
 export const MAX_PAYLOAD_BYTES = 256 * 1024;
 const MAX_STATE_BYTES = 32 * 1024 * 1024;
@@ -411,8 +412,9 @@ export class PortalClient {
   }
   async request(method, endpoint, body) {
     if (
-      !["/api/agent/config", "/api/agent/heartbeat"].includes(endpoint) &&
-      !/^\/api\/agent\/runs\/[a-f0-9]{64}$/.test(endpoint)
+      !["/api/agent/config", "/api/agent/heartbeat", "/api/agent/jobs/claim"].includes(endpoint) &&
+      !/^\/api\/agent\/runs\/[a-f0-9]{64}$/.test(endpoint) &&
+      !/^\/api\/agent\/jobs\/[a-f0-9-]{36}\/(lease|complete)$/.test(endpoint)
     )
       fail("Unsupported portal endpoint.");
     const serialized = body === undefined ? undefined : JSON.stringify(body);
@@ -565,7 +567,7 @@ function inside(root, candidate) {
       !path.isAbsolute(relative))
   );
 }
-async function trustedPath(root, requested, { missing = false } = {}) {
+export async function trustedPath(root, requested, { missing = false } = {}) {
   const target = path.resolve(root, requested);
   const relative = path.relative(root, target);
   if (
@@ -600,7 +602,7 @@ async function trustedPath(root, requested, { missing = false } = {}) {
     fail("Agent paths cannot resolve outside the trusted bot directory.");
   return target;
 }
-async function readJson(filename, maximum, { missing = false } = {}) {
+export async function readJson(filename, maximum, { missing = false } = {}) {
   let handle;
   try {
     handle = await fs.open(filename, "r");
@@ -744,6 +746,10 @@ export async function syncOnce({
       localModels: localInventory(bot.config).length,
     };
   }
+  if (options.checkRunner) {
+    const runner = await prepareRunner({ bot, options, env, readJson, trustedPath, sanitizeText });
+    return { preflight: true, runner: runner.heartbeat, dryRun: true, runs: 0, skipped: 0, uploaded: 0, unchanged: 0, settingsApplied: false, localModels: localInventory(bot.config).length };
+  }
   const portal =
     client ||
     new PortalClient({
@@ -773,9 +779,8 @@ export async function syncOnce({
       settingsApplied = true;
     }
   }
-  await portal.request("POST", "/api/agent/heartbeat", {
-    models: localInventory(bot.config),
-  });
+  const runner = await prepareRunner({ bot, options, env, repository: remote.repository, readJson, trustedPath, sanitizeText });
+  await portal.request("POST", "/api/agent/heartbeat", { models: localInventory(bot.config), runner: runner.heartbeat });
   const { records, skipped } = serializeState(bot.state, remote.repository);
   let uploaded = 0,
     unchanged = 0;
@@ -790,6 +795,7 @@ export async function syncOnce({
     receipts.set(key, digest);
     uploaded++;
   }
+  const job = options.executeJobs ? await runClaimedJob({ runner, bot, portal, models: localInventory(bot.config), env, readJson, trustedPath, sanitizeText, signal: options.signal }) : undefined;
   return {
     dryRun: false,
     runs: records.length,
@@ -798,9 +804,11 @@ export async function syncOnce({
     unchanged,
     settingsApplied,
     localModels: localInventory(bot.config).length,
+    ...(job ? { job } : {}),
   };
 }
 
+/** @returns {Record<string, any>} */
 export function parseArgs(args) {
   const options = {};
   const flags = {
@@ -809,6 +817,8 @@ export function parseArgs(args) {
     "--allow-http-loopback": "allowHttpLoopback",
     "--allow-images": "allowImages",
     "--dry-run": "dryRun",
+    "--execute-jobs": "executeJobs",
+    "--check-runner": "checkRunner",
     "--help": "help",
   };
   const values = {
@@ -817,6 +827,7 @@ export function parseArgs(args) {
     "--config": "config",
     "--interval": "interval",
     "--allow-backends": "allowedBackends",
+    "--runner-policy": "runnerPolicy",
   };
   for (let i = 0; i < args.length; i++) {
     if (flags[args[i]]) options[flags[args[i]]] = true;
@@ -844,6 +855,8 @@ export function parseArgs(args) {
     fail("--interval must be 30 to 3600 seconds.");
   if (options.dryRun && options.watch)
     fail("--dry-run is a single offline preview and cannot use --watch.");
+  if (options.checkRunner && (options.watch || options.dryRun)) fail("--check-runner is a single local preflight; omit --watch and --dry-run.");
+  if (options.executeJobs && options.watch && options.interval > 60) fail("Execution runners must poll every 30 to 60 seconds to keep enrollment online.");
   return options;
 }
 
@@ -851,14 +864,17 @@ export async function main(args = process.argv.slice(2)) {
   const options = parseArgs(args);
   if (options.help) {
     console.log(
-      "Usage: node scripts/agent.mjs --bot-dir /path/to/qa-signoff-bot [--state .qa-local/state.json] [--config qa-config.json] [--watch] [--interval 30] [--apply-model-settings] [--allow-backends openrouter,local] [--allow-images] [--allow-http-loopback] [--dry-run]\nSet QA_PORTAL_URL and QA_PORTAL_TOKEN in the environment. Default sync never writes local files.",
+      "Usage: node scripts/agent.mjs --bot-dir /path/to/qa-signoff-bot [--state .qa-local/state.json] [--config qa-config.json] [--watch] [--interval 30] [--apply-model-settings] [--allow-backends openrouter,local] [--allow-images] [--allow-http-loopback] [--execute-jobs --runner-policy portal-policy.json] [--check-runner] [--dry-run]\nSet QA_PORTAL_URL and QA_PORTAL_TOKEN in the environment. Default sync never writes local files; execution requires explicit local enrollment.",
     );
     return;
   }
   let stopped = false;
+  const controller = new AbortController();
+  options.signal = controller.signal;
   let wake;
   const stop = () => {
     stopped = true;
+    controller.abort();
     wake?.();
   };
   process.once("SIGINT", stop);
@@ -867,7 +883,9 @@ export async function main(args = process.argv.slice(2)) {
   try {
     do {
       try {
-        console.log(JSON.stringify(await syncOnce({ options, receipts })));
+        const result = await syncOnce({ options, receipts });
+        console.log(JSON.stringify(result));
+        if (options.checkRunner && 'runner' in result && !result.runner.ready) process.exitCode = 2;
       } catch (error) {
         console.error(
           `Agent sync failed: ${error instanceof Error ? error.message : "Unexpected connector error."}`,
