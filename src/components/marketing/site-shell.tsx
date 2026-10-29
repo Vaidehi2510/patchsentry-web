@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowUpRight, Github, Menu, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect,useState } from "react";
 import { MotionToggle } from "../motion";
 
 export function BrandMark({
@@ -30,9 +30,10 @@ export function BrandMark({
     </svg>
   );
 }
-export function Brand({ href = "/" }: { href?: string }) {
+export function Brand({ href }: { href?: string }) {
+  const [signedIn,setSignedIn]=useState(false);useEffect(()=>{let alive=true;fetch("/api/session",{cache:"no-store"}).then(r=>r.json()).then(d=>{if(alive)setSignedIn(Boolean(d.user));}).catch(()=>{});return()=>{alive=false;};},[]);
   return (
-    <Link href={href} className="brand" aria-label="Patchsentry home">
+    <Link href={href||(signedIn?"/app?tab=overview":"/")} className="brand" aria-label="Patchsentry home">
       <BrandMark />
       <span>
         patchsentry<span className="brand-period">.</span>

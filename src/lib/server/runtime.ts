@@ -8,6 +8,7 @@ export interface Runtime {
   config: AuthConfig;
   catalog?: () => Promise<{ models: CatalogModel[]; fetchedAt: string }>;
   connectionFetch?: typeof fetch;
+  domainResolve?: (name:string)=>Promise<string[][]>;
 }
 let current: Promise<Runtime | null> | undefined;
 

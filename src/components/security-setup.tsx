@@ -2,10 +2,10 @@
 import {useEffect,useState,type FormEvent} from 'react';
 import {ShieldCheck,Smartphone,Mail,ArrowRight,LoaderCircle,Download} from 'lucide-react';
 import {AuthFrame,authPost} from './auth-form';
-type State={step:string;method:'totp'|'email'|null;email?:string;emailCodesReady:boolean;next:string};
+type State={step:string;method:'totp'|'email'|null;email?:string;emailCodesReady:boolean;next:string;canRememberDevice?:boolean};
 type Enrollment={method:'totp'|'email';totpURI?:string;qrCode?:string;backupCodes?:string[]};
 export function SecuritySetup(){
- const [state,setState]=useState<State|null>(null),[password,setPassword]=useState(''),[confirm,setConfirm]=useState(''),[method,setMethod]=useState<'totp'|'email'>('totp'),[enrollment,setEnrollment]=useState<Enrollment|null>(null),[saved,setSaved]=useState(false),[code,setCode]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[recovery,setRecovery]=useState(false),[retryAt,setRetryAt]=useState(0),[seconds,setSeconds]=useState(0);
+ const [state,setState]=useState<State|null>(null),[password,setPassword]=useState(''),[confirm,setConfirm]=useState(''),[method,setMethod]=useState<'totp'|'email'>('totp'),[enrollment,setEnrollment]=useState<Enrollment|null>(null),[saved,setSaved]=useState(false),[code,setCode]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[remember,setRemember]=useState(true),[recovery,setRecovery]=useState(false),[retryAt,setRetryAt]=useState(0),[seconds,setSeconds]=useState(0);
  async function load(){const r=await fetch('/api/security/status',{cache:'no-store'}),s=await r.json();if(!r.ok)throw new Error(s.error||'Could not load account security.');if(s.step==='login'||s.step==='complete'){location.replace(s.next);return;}setState(s);}
  useEffect(()=>{load().catch(e=>setError(e.message));},[]);
  useEffect(()=>{const update=()=>setSeconds(Math.max(0,Math.ceil((retryAt-Date.now())/1000)));update();const t=setInterval(update,1000);return()=>clearInterval(t);},[retryAt]);
@@ -13,7 +13,7 @@ export function SecuritySetup(){
  const challenge=state?.step==='verify'||Boolean(enrollment),factor=enrollment?.method||state?.method;
  async function submit(e:FormEvent){e.preventDefault();await action(async()=>{
   if(state?.step==='password'){await authPost('/api/security/password',{password,confirmPassword:confirm});setConfirm('');await load();}
-  else if(challenge){const result=await authPost('/api/security/verify',{code:code.trim(),...(recovery?{recovery:true}:{})});setPassword('');setCode('');location.replace(result.next);}
+  else if(challenge){const result=await authPost('/api/security/verify',{code:code.trim(),...(recovery?{recovery:true}:{}),rememberDevice:remember&&Boolean(state?.canRememberDevice)});setPassword('');setCode('');location.replace(new URLSearchParams(location.search).get('next')==='account'?'/app?tab=account':result.next);}
   else{const result=await authPost('/api/security/enroll',{method,password});setEnrollment(result);setPassword('');setCode('');if(result.method==='email'){setMessage('A code has been sent to your verified email.');setRetryAt(Date.now()+60000);}}
  });}
  async function send(){await action(async()=>{await authPost('/api/security/send-code',{});setMessage('A new code has been sent to your verified email.');setRetryAt(Date.now()+60000);});}
@@ -26,8 +26,9 @@ export function SecuritySetup(){
  {factor==='email'&&<button type="button" className="text-button" disabled={busy||seconds>0} onClick={send}>{seconds?`Request another code in ${seconds}s`:'Send a verification code'}</button>}
  {state.step==='verify'&&factor==='totp'&&<button type="button" className="text-button" onClick={()=>{setRecovery(!recovery);setCode('');setError('');}}>{recovery?'Use my authenticator app':'Use a recovery code'}</button>}
  </>}
+ {challenge&&state.canRememberDevice&&<label className="testing-checkbox"><input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)}/>Remember this browser for 30 days. Do not use on a shared device.</label>}
  {error&&<p role="alert" className="form-error">{error}</p>}{message&&<p role="status" className="fineprint">{message}</p>}
  <button className="button button-primary auth-submit" disabled={busy||(enrollment?.method==='totp'&&!saved)}>{busy?<><LoaderCircle size={18} className="loading-spin"/>Verifying…</>:<>{state.step==='password'?'Save password and continue':challenge?'Verify and open workspace':'Set up two-step verification'}<ArrowRight size={18}/></>}</button>
  </form>}
- {!state&&error&&<p role="alert" className="form-error">{error}</p>}<p className="fineprint">Passwords and codes stay out of product repositories and QA model prompts. Two-step verification is required for every new sign-in.</p><button type="button" className="text-button auth-help" onClick={()=>action(async()=>{await authPost('/api/auth/sign-out',{});location.replace('/login');})}>Start again with another account</button></AuthFrame>;
+ {!state&&error&&<p role="alert" className="form-error">{error}</p>}<p className="fineprint">Passwords and codes stay out of product repositories and QA model prompts. Owners and admins verify MFA at every sign-in. QA engineers and viewers can remember a browser; new browsers still require MFA.</p><button type="button" className="text-button auth-help" onClick={()=>action(async()=>{await authPost('/api/auth/sign-out',{});location.replace('/login');})}>Start again with another account</button></AuthFrame>;
 }

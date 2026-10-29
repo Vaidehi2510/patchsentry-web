@@ -1,4 +1,5 @@
 "use client";
+import {AccountSettings} from "./account-settings";
 import { subjectLabel, subjectTitle, platformLabels } from "@/lib/targets";
 import { releaseGate } from "@/lib/release-gate";
 import { TeamOperations, JoinProject } from "./team-operations";
@@ -45,7 +46,7 @@ import "./workspace.css";
 import { MotionToggle } from "./motion";
 import { runnerOnline } from "@/lib/jobs";
 
-type Tab = "overview" | "runs" | "models" | "testing" | "integration" | "tests" | "team";
+type Tab = "overview" | "runs" | "models" | "testing" | "integration" | "tests" | "team" | "account";
 type User = { id: string; name: string; email: string };
 const nav = [
   { id: "overview" as Tab, label: "Overview", icon: LayoutDashboard },
@@ -115,8 +116,10 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     [selected, setSelected] = useState<Run | null>(null),
     [creating, setCreating] = useState(false),
     [mobile, setMobile] = useState(false),
+    [accountMenu,setAccountMenu]=useState(false),
     [busy, setBusy] = useState(false);
   const project = projects.find((p) => p.id === projectId);
+  useEffect(()=>{if(!accountMenu)return;const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){setAccountMenu(false);document.querySelector<HTMLButtonElement>('.account-trigger')?.focus();}};const outside=(e:PointerEvent)=>{if(!(e.target as Element).closest('.sidebar-account'))setAccountMenu(false);};document.addEventListener('keydown',key);document.addEventListener('pointerdown',outside);return()=>{document.removeEventListener('keydown',key);document.removeEventListener('pointerdown',outside);};},[accountMenu]);
   const dialogReturnFocus = useRef<HTMLElement | null>(null);
   function openProject() {
     dialogReturnFocus.current = document.activeElement as HTMLElement | null;
@@ -152,10 +155,11 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
         }
         if (!alive) return;
         setUser(d.user);
+        if(sessionStorage.getItem('patchsentry-invitation')){location.replace('/invite');return;}
         const p = await api("/api/projects");
         if (alive) {
           setProjects(p.projects);
-          setProjectId(p.projects[0]?.id || "");
+          setProjectId(p.projects.find((x:Project)=>x.id===new URLSearchParams(location.search).get("project"))?.id || p.projects[0]?.id || "");
           setLoading(false);
         }
       })
@@ -187,13 +191,13 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
   }, [projectId, demo]);
   useEffect(() => {
     const value = new URLSearchParams(location.search).get("tab");
-    if (nav.some((x) => x.id === value)) setTab(value as Tab);
+    if (value==="account" || nav.some((x) => x.id === value)) setTab(value as Tab);
   }, []);
   function go(next: Tab) {
-    setTab(next);
+    setTab(next);setAccountMenu(false);
     setSelected(null);
     setMobile(false);
-    history.replaceState(null, "", `${demo ? "/demo" : "/app"}?tab=${next}`);
+    history.replaceState(null, "", `${demo ? "/demo" : "/app"}?tab=${next}${!demo&&projectId?`&project=${encodeURIComponent(projectId)}`:""}`);
     requestAnimationFrame(() => {
       document.getElementById("workspace-title")?.focus({ preventScroll: true });
       window.scrollTo({ top: 0, behavior: "instant" });
@@ -260,7 +264,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
         aria-label="Workspace navigation"
         className={`app-sidebar ${mobile ? "sidebar-open" : ""}`}
       >
-        <Link className="wordmark" href="/">
+        <Link className="wordmark" aria-label="Patchsentry workspace overview" href={demo?"/demo?tab=overview":"/app?tab=overview"} onClick={e=>{e.preventDefault();go("overview");}}>
           <BrandMark />
           patchsentry
         </Link>
@@ -304,7 +308,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             <br />
             Evidence for every decision.
           </p>
-          <Link href="/security">
+          <Link href="/architecture#permissions">
             Our permission model <ArrowUpRight size={14} />
           </Link>
         </div>
@@ -318,31 +322,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             Product website
           </Link>
         </nav>
-        <div className="sidebar-user">
-          <span className="user-avatar">{user?.name.slice(0, 1) || "P"}</span>
-          <div>
-            <strong>{user?.name || "Loading…"}</strong>
-            <small>{demo ? "Exploring Patchsentry" : user?.email}</small>
-          </div>
-          {!demo && (
-            <button
-              aria-label="Sign out"
-              onClick={async () => {
-                try {
-                  await api("/api/auth/sign-out", {
-                    method: "POST",
-                    body: "{}",
-                  });
-                  location.assign("/login");
-                } catch (e) {
-                  setError((e as Error).message);
-                }
-              }}
-            >
-              <LogOut size={17} />
-            </button>
-          )}
-        </div>
+        <div className="sidebar-account"><button className="sidebar-user account-trigger" aria-expanded={accountMenu} aria-controls="account-menu" onClick={()=>setAccountMenu(!accountMenu)}><span className="user-avatar">{user?.name.slice(0,1)||"P"}</span><span><strong>{user?.name||"Loading…"}</strong><small>{demo?"Exploring Patchsentry":user?.email}</small></span><ChevronDown size={17}/></button>{accountMenu&&<div id="account-menu" className="account-menu"><button onClick={()=>go("account")}>Manage my account</button><button onClick={()=>go("overview")}>Workspace overview</button><Link href="/architecture">How Patchsentry works</Link>{!demo&&<button onClick={async()=>{try{await api("/api/auth/sign-out",{method:"POST",body:"{}"});location.assign("/login");}catch(e){setError((e as Error).message);}}}>Sign out</button>}</div>}</div>
       </aside>
       {mobile && (
         <button
@@ -363,7 +343,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             </button>
             <span className="topbar-muted">Workspace</span>
             <ChevronRight size={13} />
-            <strong>{nav.find((n) => n.id === tab)?.label}</strong>
+            <strong>{tab==="account"?"My account":nav.find((n) => n.id === tab)?.label}</strong>
           </div>
           <div>
             <MotionToggle />
@@ -406,7 +386,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
           ) : (
             <>
               {!demo && <JoinProject refresh={refresh} />}
-              {project?.accessRole && project.accessRole !== "owner" && <p className="notice">Project access: {project.accessRole}. Your permissions control the actions available below.</p>}
+              {project?.accessRole && project.accessRole !== "owner" && <p className="notice">Patchsentry project role: {project.accessRole === "qa" ? "QA engineer" : project.accessRole}. Your permissions control the actions available below.</p>}
               <div className="app-heading">
                 <div>
                   <span className="eyebrow">
@@ -415,7 +395,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   <h1 id="workspace-title" tabIndex={-1}>
                     {selected
                       ? subjectLabel(selected)
-                      : tab === "overview"
+                      : tab === "account" ? "Your account. Your control." : tab === "overview"
                         ? "Ship with your eyes open."
                         : tab === "runs"
                           ? "Every change. Every finding."
@@ -426,7 +406,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   <p>
                     {selected
                       ? subjectTitle(selected)
-                      : tab === "overview"
+                      : tab === "account" ? "Manage your profile, sign-in security, devices and workspaces." : tab === "overview"
                         ? "A clear view of what’s ready, what’s risky, and what needs you."
                         : tab === "runs"
                           ? "Trace each result to the exact revision that was tested."
@@ -465,7 +445,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   </button>
                 </div>
               </div>
-              {!project ? (
+              {tab==="account" ? <AccountSettings demo={demo} projects={projects} onProfile={name=>setUser(u=>u?{...u,name}:u)}/> : !project ? (
                 <div className="empty-state large">
                   <span className="empty-icon">
                     <GitPullRequest size={28} />
@@ -707,9 +687,9 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             <span className="eyebrow">YOUR NEXT PRODUCT</span>
             <h2 id="project-title">Create a project</h2>
             <p>
-              Register the repository you want to test. Access is configured
-              separately on your trusted runner.
+              Create a Patchsentry workspace for an authorized repository. This makes you its Patchsentry owner, not a GitHub repository owner. A repository administrator must separately authorize the read-only runner connection.
             </p>
+            <p className="fineprint">Creating a project requires a verified MFA session. If you used a remembered browser, <Link href="/app?tab=account">open My account</Link> and choose “Verify MFA for account changes” first.</p>
             <form onSubmit={create}>
               <label>
                 Project name

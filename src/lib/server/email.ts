@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 import { z } from "zod";
 
-export type SignInLink = { email: string; url: string; purpose?: 'reset' };
+export type SignInLink = { email: string; url: string; purpose?: 'reset'|'change' };
 export type SendSignInLink = (message: SignInLink) => Promise<void>;
 export type SendSecurityCode = (message:{email:string;code:string}) => Promise<void>;
 
@@ -9,10 +9,11 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, c => ({ "&": "&a
 
 export function signInEmail({ email, url, purpose }: SignInLink, origin: string) {
   const link = new URL(url);
-  if (link.origin !== origin || (purpose==='reset' ? !/^\/api\/auth\/reset-password\/[A-Za-z0-9_-]+$/.test(link.pathname) : link.pathname !== "/api/auth/magic-link/verify" || !link.searchParams.get("token")))
+  if (link.origin !== origin || (purpose==='change' ? link.pathname !== '/api/auth/verify-email' || !link.searchParams.get('token') : purpose==='reset' ? !/^\/api\/auth\/reset-password\/[A-Za-z0-9_-]+$/.test(link.pathname) : link.pathname !== "/api/auth/magic-link/verify" || !link.searchParams.get("token")))
     throw new Error("Invalid authentication email link");
   if (!z.email().safeParse(email).success) throw new Error("Invalid email recipient");
   const safeUrl = escapeHtml(link.href);
+  if(purpose==='change')return {to:email,subject:'Confirm your Patchsentry email change',text:`Confirm your email change using this link:\n${link.href}\n\nWe confirm your current inbox first, then verify your new inbox. Your existing address stays active until both steps finish. This link expires in ten minutes. If you did not request this, do not click it.`,html:`<h1>Confirm your email change</h1><p>We confirm the current inbox first, then verify the new address. Your sign-in address changes only after both steps.</p><p><a href="${safeUrl}">Confirm this email address</a></p><p>Expires in ten minutes. If you did not request this, ignore the message.</p>`,disableFileAccess:true,disableUrlAccess:true};
   if(purpose==='reset')return {to:email,subject:'Reset your Patchsentry password',text:`Reset your password using this single-use link:\n${link.href}\n\nIf you did not request it, ignore this email. Resetting your password does not disable two-step verification.`,html:`<h1>Reset your password</h1><p><a href="${safeUrl}">Choose a new password</a></p><p>Your second factor remains required to sign in.</p>`,disableFileAccess:true,disableUrlAccess:true};
   return {
     to: email,
@@ -63,3 +64,7 @@ export function gmailSecuritySender(env:Record<string,string|undefined>=process.
     catch{throw new Error('We could not deliver your verification code. Try again shortly.');}
   };
 }
+
+export type SendInvitation=(message:{email:string;url:string;projectName:string;inviter:string;role:string})=>Promise<void>;
+export function invitationEmail(message:Parameters<SendInvitation>[0],origin:string){const url=new URL(message.url);if(url.origin!==origin||url.pathname!=='/invite'||url.search||!/^#token=[A-Za-z0-9_-]{43}$/.test(url.hash)||!z.email().safeParse(message.email).success)throw new Error('Invalid invitation');const project=message.projectName.replace(/[\r\n]/g,' ').slice(0,80),inviter=message.inviter.slice(0,100);return {to:message.email,subject:`You are invited to ${project} on Patchsentry`,text:`${inviter} invited you to ${project} as ${message.role}.\n\nOpen your invitation: ${url.href}\n\nSign in or create an account with this exact email address, then accept. The link expires in seven days and works once. A Patchsentry role does not grant GitHub access. Ignore this message if unexpected.`,html:`<h1>Join ${escapeHtml(project)}</h1><p>${escapeHtml(inviter)} invited you as <strong>${escapeHtml(message.role)}</strong>.</p><p><a href="${escapeHtml(url.href)}">Review invitation</a></p><p>Sign in or create an account with this invited email address. Expires in seven days. Your GitHub permissions do not change.</p>`,disableFileAccess:true,disableUrlAccess:true};}
+export function gmailInvitationSender(origin:string,env:Record<string,string|undefined>=process.env):SendInvitation|undefined{const smtp=gmailTransport(env);if(!smtp)return;return async message=>{try{const r=await smtp.transport.sendMail({...invitationEmail(message,origin),from:{name:'Patchsentry',address:smtp.user}});if(!r.accepted?.length||r.rejected?.length)throw new Error();}catch{throw new Error('Invitation delivery could not be confirmed');}};}

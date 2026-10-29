@@ -1,7 +1,7 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
 import { magicLink, twoFactor } from "better-auth/plugins";
-import { gmailSender, gmailSecuritySender, type SendSignInLink, type SendSecurityCode } from "./email";
+import { gmailSender, gmailSecuritySender, gmailInvitationSender, type SendSignInLink, type SendSecurityCode, type SendInvitation } from "./email";
 import { sendFactorCode } from './factor-delivery';
 import type { Database } from "./database";
 
@@ -11,6 +11,7 @@ export interface AuthConfig {
   production: boolean;
   sendSignInLink?: SendSignInLink;
   sendSecurityCode?: SendSecurityCode;
+  sendInvitation?: SendInvitation;
 }
 
 export function authConfig(
@@ -39,7 +40,7 @@ export function authConfig(
     throw new Error("BETTER_AUTH_URL must be an exact site origin");
   if (production && (url.protocol !== "https:" || !env.DATABASE_URL))
     throw new Error("Production requires HTTPS and DATABASE_URL");
-  return { secret: env.BETTER_AUTH_SECRET, origin: url.origin, production, sendSignInLink: gmailSender(url.origin, env), sendSecurityCode:gmailSecuritySender(env) };
+  return { secret: env.BETTER_AUTH_SECRET, origin: url.origin, production, sendSignInLink: gmailSender(url.origin, env), sendSecurityCode:gmailSecuritySender(env), sendInvitation:gmailInvitationSender(url.origin,env) };
 }
 
 export function authOptions(
@@ -65,6 +66,8 @@ export function authOptions(
         await config.sendSignInLink(message);
       },
     }), twoFactor({issuer:'Patchsentry',skipVerificationOnEnable:false,otpOptions:{storeOTP:'hashed',period:5,allowedAttempts:5,async sendOTP({user,otp}){await sendFactorCode(database,config,user.id,user.email,otp);}},backupCodeOptions:{storeBackupCodes:'encrypted'},accountLockout:{enabled:true,maxFailedAttempts:10,durationSeconds:900}})],
+    user:{changeEmail:{enabled:true,updateEmailWithoutVerification:false,async sendChangeEmailConfirmation({user,url}){if(!config.sendSignInLink)throw new Error('Email delivery unavailable');await config.sendSignInLink({email:user.email,url,purpose:'change'});}}},
+    emailVerification:{expiresIn:600,autoSignInAfterVerification:false,async sendVerificationEmail({user,url}){if(!config.sendSignInLink)throw new Error('Email delivery unavailable');await config.sendSignInLink({email:user.email,url,purpose:'change'});},async afterEmailVerification(user){await database.query('DELETE FROM "session" WHERE "userId"=$1',[user.id]);await database.query('DELETE FROM qa_trusted_devices WHERE user_id=$1',[user.id]);await database.query('DELETE FROM qa_auth_challenges WHERE user_id=$1',[user.id]);await database.query('DELETE FROM verification WHERE value=$1 AND (identifier LIKE \'trust-device-%\' OR identifier LIKE \'2fa-%\')',[user.id]);}},
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
     rateLimit: {
       enabled: true,
@@ -159,5 +162,10 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
   await database.query('CREATE TABLE IF NOT EXISTS qa_slack_threads (project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,channel_id text NOT NULL,job_id text NOT NULL,ts text NOT NULL,PRIMARY KEY(project_id,channel_id,job_id))');
   await database.query("CREATE TABLE IF NOT EXISTS qa_model_setup (id text PRIMARY KEY,project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,runner_id text NOT NULL,payload jsonb NOT NULL,sealed_key text,status text NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','running','passed','failed','uncertain')),key_verified_at timestamptz,claim_hash text,claimed_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),completed_at timestamptz,result jsonb)");
   await database.query('ALTER TABLE qa_runners ADD COLUMN IF NOT EXISTS setup_key text');
+  await database.query("ALTER TABLE qa_auth_proofs ADD COLUMN IF NOT EXISTS device_id text");
+  await database.query("ALTER TABLE qa_auth_proofs ADD COLUMN IF NOT EXISTS mfa_verified_at timestamptz");
+  await database.query("CREATE TABLE IF NOT EXISTS qa_trusted_devices (id text PRIMARY KEY,user_id text NOT NULL REFERENCES \"user\"(id) ON DELETE CASCADE,agent_hash text NOT NULL,label text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),expires_at timestamptz NOT NULL)");
+  await database.query("CREATE TABLE IF NOT EXISTS qa_work_domains (project_id text PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,domain text NOT NULL,challenge text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),verified_at timestamptz)");
+  await database.query("ALTER TABLE qa_invites ADD COLUMN IF NOT EXISTS delivery_status text NOT NULL DEFAULT 'manual'");
   await database.query('CREATE INDEX IF NOT EXISTS qa_model_setup_project_idx ON qa_model_setup(project_id,status,created_at)');
 }

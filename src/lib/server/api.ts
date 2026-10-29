@@ -1,7 +1,10 @@
-import {securityState, securityEndpoint, credentialExists, passwordSignIn, authCall, securitySignOut, resetWithMfa, setupRequestLimit, SecurityError} from './session-security';
+import {revokeDevices} from './trusted-devices';
+import {accountEndpoint} from './account';
+import {domainState,configureDomain,verifyDomain} from './work-domain';
+import {securityState, securityEndpoint, credentialExists, passwordSignIn, authCall, securitySignOut, resetWithMfa, setupRequestLimit, rate, SecurityError} from './session-security';
 import {modelConnections,requestModelSetup,claimModelSetup,completeModelSetup} from './model-connection';
 import { roleRank, SlackSettingsSchema, slackDefaults, type AccessRole } from '../team';
-import { audit, members, invite, acceptInvite, removeMember, queueNotification, claimNotification, finishNotification } from './team';
+import { audit, members, invite, changeMemberRole, acceptInvite, removeMember, queueNotification, claimNotification, finishNotification } from './team';
 import { releaseGate } from "../release-gate";
 import { AssessmentTargetSchema } from "../targets";
 import { listTestCases, saveTestCase, deleteTestCase } from "./test-cases";
@@ -292,9 +295,10 @@ async function dispatch(
       503,
       "Account storage is not configured. Set the database and authentication environment variables.",
     );
+  if(path.startsWith('/api/account')){if(request.method!=='GET')requireOrigin(request,runtime.config.origin);return accountEndpoint(request,runtime,request.method==='GET'?undefined:await readBody(request));}
   if(path.startsWith('/api/security/')){if(request.method!=='GET')requireOrigin(request,runtime.config.origin);return securityEndpoint(request,runtime,request.method==='POST'?await readBody(request):undefined);}
   if (path.startsWith("/api/auth/")) {
-    const allowed=new Set(['POST /api/auth/sign-in/magic-link','GET /api/auth/magic-link/verify','POST /api/auth/sign-out','POST /api/auth/sign-in/email','POST /api/auth/request-password-reset','POST /api/auth/reset-password']);
+    const allowed=new Set(['POST /api/auth/sign-in/magic-link','GET /api/auth/magic-link/verify','POST /api/auth/sign-out','POST /api/auth/sign-in/email','POST /api/auth/request-password-reset','POST /api/auth/reset-password','GET /api/auth/verify-email']);
     if(!allowed.has(`${request.method} ${path}`) && !(request.method==='GET' && /^\/api\/auth\/reset-password\/[A-Za-z0-9_-]+$/.test(path)))throw new ApiError(404,'Use the password and two-step verification flow.');
     if(request.method==='GET')return runtime.auth.handler(request);
     requireOrigin(request,runtime.config.origin);const raw=await readBody(request);
@@ -405,16 +409,20 @@ async function dispatch(
   }
   if (request.method !== "GET") requireOrigin(request, runtime.config.origin);
   const user = await userFor(request, runtime);
+  const domainMatch=/^\/api\/projects\/([a-f0-9-]{36})\/domain(?:\/(verify))?$/.exec(path);
+  if(domainMatch){const p=await accessibleProject(runtime,domainMatch[1],user.id,'admin');if(request.method==='GET'&&!domainMatch[2])return json(await domainState(runtime,p.id));if(request.method==='POST')return json(domainMatch[2]?await verifyDomain(runtime,p.id):await configureDomain(runtime,p.id,await readBody(request)));if(request.method==='DELETE'&&!domainMatch[2]){await runtime.database.query('DELETE FROM qa_work_domains WHERE project_id=$1',[p.id]);return json({removed:true});}throw new ApiError(405,'Method not allowed.');}
   const modelSetup=/^\/api\/projects\/([a-f0-9-]{36})\/model-connections$/.exec(path);
   if(modelSetup){const project=await accessibleProject(runtime,modelSetup[1],user.id,request.method==='GET'?'viewer':'admin');if(request.method==='GET')return json(await modelConnections(runtime,project.id));if(request.method==='POST')return json(await requestModelSetup(runtime,project.id,await readBody(request)),201);throw new ApiError(405,'Method not allowed.');}
+  if(path==='/api/invitations/preview'&&request.method==='POST'){const input=parse(z.object({token:z.string().regex(/^[A-Za-z0-9_-]{43}$/)}).strict(),await readBody(request));const row=(await runtime.database.query('SELECT p.name,i.role,i.email FROM qa_invites i JOIN projects p ON p.id=i.project_id WHERE i.token_hash=$1 AND i.expires_at>now() AND lower(i.email)=lower($2)',[hashToken(input.token),user.email])).rows[0];if(!row)throw new ApiError(404,'This invitation is unavailable for your verified email. Sign in with the invited address or ask for a new invitation.');return json({invitation:row});}
   if (path === "/api/invitations/accept" && request.method === "POST") return json(await acceptInvite(runtime.database,user,await readBody(request)));
   const teamMatch = /^\/api\/projects\/([a-f0-9-]{36})\/(team|activity|fleet|slack)(?:\/([A-Za-z0-9_-]{1,100}))?$/.exec(path);
   if (teamMatch) {
     const area=teamMatch[2], action=teamMatch[3];
     const project=await accessibleProject(runtime,teamMatch[1],user.id,request.method==='GET' ? 'viewer' : 'admin');
     const role=project.access_role || 'owner';
-    if(area==='team' && request.method==='GET') return json({members:await members(runtime.database,project.id),role,pending:(await runtime.database.query("SELECT 'invite-'||token_hash AS id,email,role,expires_at FROM qa_invites WHERE project_id=$1 AND expires_at>now() ORDER BY email",[project.id])).rows});
-    if(area==='team' && !action && request.method==='POST') return json(await invite(runtime.database,project.id,user.name,role,await readBody(request)),201);
+    if(area==='team' && request.method==='GET') return json({members:await members(runtime.database,project.id),role,pending:(await runtime.database.query("SELECT 'invite-'||token_hash AS id,email,role,expires_at,delivery_status FROM qa_invites WHERE project_id=$1 AND expires_at>now() ORDER BY email",[project.id])).rows});
+    if(area==='team' && !action && request.method==='POST') {await rate(runtime,'invitation:'+project.id,10);const invitation=await invite(runtime.database,project.id,user.name,role,await readBody(request));let delivery='unavailable';if(runtime.config.sendInvitation){try{await runtime.config.sendInvitation({email:invitation.email,url:runtime.config.origin+'/invite#token='+invitation.token,projectName:project.name,inviter:user.name,role:invitation.role});delivery='accepted';}catch{delivery='unconfirmed';}}await runtime.database.query('UPDATE qa_invites SET delivery_status=$3 WHERE project_id=$1 AND token_hash=$2',[project.id,hashToken(invitation.token),delivery]);return json({...invitation,delivery},201);}
+    if(area==='team' && action && !action.startsWith('invite-') && request.method==='PATCH')return json(await changeMemberRole(runtime.database,project.id,user.name,role,action,await readBody(request)));
     if(area==='team' && action && request.method==='DELETE') {
       if(action.startsWith('invite-')){const r=await runtime.database.query("DELETE FROM qa_invites WHERE project_id=$1 AND token_hash=$2 AND ($3=true OR role<>'admin') RETURNING email",[project.id,action.slice(7),role==='owner']);if(!r.rows.length)throw new ApiError(404,'Invitation unavailable or only the owner can revoke an admin invitation.');await audit(runtime.database.query.bind(runtime.database),project.id,user.name,'member.invitation_revoked',String(r.rows[0].email));return json({revoked:true});}
       return json(await removeMember(runtime.database,project.id,user.name,role,action));
@@ -435,6 +443,7 @@ async function dispatch(
       return json({ projects: result.rows.map(projectView) });
     }
     if (request.method === "POST") {
+      const setupState=await securityState(request,runtime);if(!setupState.proof?.mfa_verified)throw new ApiError(403,'Creating a project makes you its owner. Verify your second factor in My account first.');
       const input = parse(CreateProject, await readBody(request));
       const count = await runtime.database.query<{ count: string }>(
         "SELECT count(*) AS count FROM projects WHERE owner_id = $1",
@@ -453,6 +462,7 @@ async function dispatch(
             JSON.stringify(settingsDefaults),
           ],
         );
+        await revokeDevices(runtime,user.id);
         return json({ project: projectView(result.rows[0]) }, 201);
       } catch (error) {
         if ((error as { code?: string }).code === "23505")
