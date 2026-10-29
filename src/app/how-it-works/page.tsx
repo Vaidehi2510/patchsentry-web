@@ -19,8 +19,8 @@ const stages = [
   {
     number: "01",
     icon: GitPullRequest,
-    title: "Start with the exact change.",
-    text: "Connect the QA engine to a product repository with read access. Choose the pull request or committed base and head revisions you want reviewed. The engine reads a bounded snapshot and records which revision it inspected.",
+    title: "Start with what you will ship.",
+    text: "Connect the QA engine to a product repository with read access. Choose a pull request, CI build or complete release version. Builds and releases identify both the source revision and the exact artifact SHA-256. The engine reads a bounded snapshot and records which revision it inspected.",
     items: [
       "Your product repository does not need generated tests or bot-authored commits.",
       "Read access to code is separate from optional comments, labels, and status permissions.",
@@ -42,7 +42,7 @@ const stages = [
     number: "03",
     icon: ScanEye,
     title: "Inspect, test, and collect evidence.",
-    text: "The specialists read code and select from configured, trusted checks. After explicit local enrollment, request an exact PR commit from the workspace. A durable job queue sends bounded work to your runner, which executes trusted suites and planned browser journeys against the configured preview. Browser evidence can include screenshots, accessibility issues, layout checks, and page errors.",
+    text: "The specialists read code and select from configured, trusted checks. After explicit local enrollment, request an exact PR, build or release assessment from the workspace. A durable job queue sends bounded work to your runner, which executes trusted suites and planned browser journeys against the configured preview. Browser evidence can include screenshots, accessibility issues, layout checks, and page errors.",
     items: [
       "Use a dedicated preview environment with test data for interactive journeys.",
       "Generated test code and suggested fixes remain proposals; the bot does not insert them into your product.",
@@ -53,7 +53,7 @@ const stages = [
     number: "04",
     icon: Fingerprint,
     title: "Get a decision you can inspect.",
-    text: "Real test results establish pass or fail. The final AI review investigates those results and adds cited findings, likely causes, and suggested fixes. Reports stay tied to their revision so a new commit cannot inherit an old pass.",
+    text: "Real test results establish pass or fail. The final AI review investigates those results and adds cited findings, likely causes, and suggested fixes. Reports stay tied to their source revision and, for build/release QA, their artifact, version and platform. The deployment gate requires matching fresh evidence.",
     items: [
       "A model saying “looks good” cannot replace executed test evidence.",
       "Code findings are distinguished from verified test failures.",

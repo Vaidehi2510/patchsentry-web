@@ -232,6 +232,16 @@ npm run dashboard`}</code>
               <ArrowUpRight size={14} />
             </a>
           </section>
+          <section id="releases"><span className="eyebrow">FULL PRODUCT QA</span><h2>Test the build you plan to ship.</h2><p>Choose a PR, CI build, or complete release/version from your workspace. A build/release request identifies its source commit, platform, version/build name and exact artifact SHA-256. It never needs a fabricated PR number.</p><p>Enroll baseline tests and a separate builder-manifest directory on your runner. Web previews must report both <code>x-qa-revision</code> and <code>x-qa-artifact-sha256</code> for the actual deployed build. Native checks require an enrolled disposable device; external CI reports require a matching JUnit attestation.</p><pre className="docs-code" tabIndex={0} aria-label="Release QA command"><code>{[
+              "npm run qa:release --",
+              "  --repo /read-only/product --repository owner/product",
+              "  --base LAST_RELEASE_SHA --head CANDIDATE_SHA",
+              "  --kind release --name v1.4.0 --platform web",
+              "  --artifact-sha256 ARTIFACT_SHA256",
+              "  --manifest /trusted-bot/manifests/ARTIFACT_SHA256.json",
+              "  --suite /trusted-bot/preview.json --goals /trusted-bot/goals.json"
+            ].join(String.fromCharCode(32, 92, 10))}</code></pre><p>Put <code>qa:gate</code> before your existing deployment command in CI. It exits unsuccessfully for a different artifact/version, missing checks, skipped tests, stale evidence or unresolved consequential findings. The gate verifies the artifact again; the bot itself does not deploy the product.</p><a className="text-link" href={`${engine}/blob/main/docs/releases.md`} target="_blank" rel="noreferrer">Release and deployment gate reference <ArrowUpRight size={16}/></a></section>
+          <section id="test-library"><span className="eyebrow">BOT-OWNED TESTS</span><h2>Write, save and export unit tests.</h2><p>The test library stores your authored test source separately from product code. Drafts do not execute. Explicitly enabled Node tests are frozen into each new job and execute only when the runner locally permits them in its offline container. Model-proposed source remains a draft until a person deliberately enables it.</p><p>Other framework drafts can be exported to your own CI. Import attested JUnit results from Python, Java, .NET or another supported reporter. Imported reports are labeled as imported evidence and do not imply that Patchsentry provisioned or independently verified the CI host.</p><Link className="text-link" href="/coverage">See platform execution paths <ArrowUpRight size={16}/></Link></section>
           <section id="workspace">
             <span className="eyebrow">06 / SHARE REVIEW ACTIVITY</span>
             <h2>Connect your review workspace.</h2>

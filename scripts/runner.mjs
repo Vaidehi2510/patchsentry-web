@@ -1,3 +1,4 @@
+import { assessmentIdentity, sameAssessment } from "./assessment.mjs";
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -29,6 +30,9 @@ export async function prepareRunner({ bot, options, env, repository, readJson, t
     const preflight = await bridge.preflightPortal({ policy: raw, policyPath, botDir: bot.botDir, env: executionEnvironment(env) });
     if (repository && policy.repository.toLowerCase() !== repository.toLowerCase()) heartbeat.missing.push('The local policy repository differs from the portal project.');
     heartbeat.missing.push(...(Array.isArray(preflight.missing) ? preflight.missing : ['Runner preflight did not provide a result.']).map(value => sanitizeText(value, 240)).slice(0, 19));
+    heartbeat.platforms = policy.allowedPlatforms || [];
+    heartbeat.baselineSuites = Math.min(60, (bot.config?.runners || []).filter(r => r.baseline).length);
+    heartbeat.workspaceTests = policy.allowWorkspaceTests === true;
     heartbeat.browsers = policy.allowedBrowsers;
     heartbeat.backends = policy.allowedBackends;
     heartbeat.maxPages = policy.maxPages; heartbeat.maxCostUsd = policy.maxCostUsd; heartbeat.maxCallsPerRun = policy.maxCallsPerRun;
@@ -63,7 +67,7 @@ export function executeBridge({ bridgePath, jobFile, policyPath, outputDir, botD
 
 /** Do not upload arbitrary bridge JSON: rebuild the exact summary allowlist. */
 export function sanitizeJobReport(raw, job, clean) {
-  if (!object(raw) || raw.schemaVersion !== 1 || !/^[a-f0-9]{64}$/.test(raw.recordId || '') || raw.repository !== job.repository || raw.revision !== job.revision || raw.pr?.number !== job.pr.number) throw new Error('The runner report does not match this exact job.');
+  if (!object(raw) || raw.schemaVersion !== 1 || !/^[a-f0-9]{64}$/.test(raw.recordId || '') || raw.repository !== job.repository || raw.revision !== job.revision || !sameAssessment(raw, job)) throw new Error('The runner report does not match this exact job.');
   if (!Array.isArray(raw.checks) || raw.checks.length > 200 || !Array.isArray(raw.findings) || raw.findings.length > 100) throw new Error('The runner report exceeds the complete-check or finding limit.');
   const checks = raw.checks.map(check => {
     const method = ['automated', 'analysis', 'human', 'unsupported'].includes(check.method) ? check.method : 'unsupported';
@@ -74,7 +78,7 @@ export function sanitizeJobReport(raw, job, clean) {
   const findings = raw.findings.map(f => ({ title: clean(f.title, 240) || 'Untitled finding', severity: ['critical', 'high', 'medium', 'low', 'info'].includes(f.severity) ? f.severity : 'info', category: clean(f.category, 80), description: clean(f.description, 1600), ...(typeof f.suggestedFix === 'string' ? { suggestedFix: clean(f.suggestedFix, 1600) } : {}), status: 'unverified' }));
   if (!Number.isFinite(Date.parse(raw.createdAt)) || raw.completedAt && !Number.isFinite(Date.parse(raw.completedAt))) throw new Error('The runner report has invalid timestamps.');
   const finite = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 10000;
-  const report = { schemaVersion: 1, recordId: raw.recordId, repository: job.repository, pr: { number: job.pr.number, title: clean(raw.pr.title, 300) }, revision: job.revision,
+  const report = { schemaVersion: 1, recordId: raw.recordId, repository: job.repository, ...(job.target ? assessmentIdentity(job) : { pr: { number: job.pr.number, title: clean(raw.pr.title, 300) } }), revision: job.revision,
     createdAt: new Date(raw.createdAt).toISOString(), completedAt: raw.completedAt ? new Date(raw.completedAt).toISOString() : null, phase: clean(raw.phase, 80), checks, findings,
     ai: { backend: ['openrouter', 'local'].includes(raw.ai?.backend) ? raw.ai.backend : 'unknown', model: clean(raw.ai?.model, 160), costUsd: finite(raw.ai?.costUsd) ? raw.ai.costUsd : null, costIsEstimate: raw.ai?.costIsEstimate !== false, calls: Number.isInteger(raw.ai?.calls) && finite(raw.ai.calls) ? raw.ai.calls : 0 },
     limitations: (Array.isArray(raw.limitations) ? raw.limitations : []).slice(0, 29).map(value => clean(value, 600)).concat('Sanitized summaries may contain product information; source files, screenshots and raw evidence remain on the runner.') };

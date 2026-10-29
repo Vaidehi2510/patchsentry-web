@@ -2462,3 +2462,24 @@ html[data-motion=on] .auth-story:before { animation: ambient-drift 14s ease-in-o
 .workspace .qa-request-details .job-queue { border: 0; border-top: 1px solid #e5e5dd; border-radius: 0 0 14px 14px; }
 @media (max-width: 1000px) { .workspace .setup-checklist-grid { grid-template-columns: 1fr; } .workspace .setup-checklist-heading { align-items: start; } }
 @media (max-width: 480px) { .workspace .setup-checklist { padding: 20px; } .workspace .setup-checklist-heading { flex-direction: column; gap: 13px; } }
+.workspace .test-library-layout { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(0, 2fr); gap: 24px; align-items: start; }
+.workspace .test-library-list { padding-bottom: 18px; }
+.workspace .test-library-item { display: flex; gap: 12px; align-items: start; padding: 20px; width: 100%; border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; color: var(--ink); }
+.workspace .test-library-item.active { background: #f1edf9; }
+.workspace .test-library-item svg { flex-shrink: 0; margin-top: 3px; color: var(--accent); }
+.workspace .test-library-item strong { display: block; font-size: 15px; overflow-wrap: anywhere; }
+.workspace .test-library-item small { display: block; font-size: 13px; color: var(--muted); margin-top: 7px; }
+.workspace .test-editor { display: grid; gap: 22px; padding: 25px; }
+.workspace .test-editor .panel-heading { padding: 0; }
+.workspace .test-editor textarea.test-source { font: 14px/1.8 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; padding: 20px; border: 1px solid #dce0d2; border-radius: 10px; width: 100%; resize: vertical; color: #e6eadc; background: #292e26; }
+.workspace .assessment-request { display: grid; gap: 22px; padding: 0 25px 22px; }
+.workspace .assessment-request .notice { margin: 0; }
+.workspace .assessment-request .notice p { margin: 0; line-height: 1.8; }
+.workspace .assessment-request .notice svg { flex-shrink: 0; }
+.workspace .assessment-request > .button { justify-self: start; }
+.workspace .release-summary { margin-bottom: 25px; padding: 26px; background: #f3f0f9; }
+.workspace .release-summary h2 { margin: 12px 0; font-size: 25px; }
+.workspace .release-summary label code { display: block; margin-top: 8px; color: #65518f; font-size: 14px; overflow-wrap: anywhere; }
+.workspace .release-summary ul { margin: 18px 0 0; font-size: 14px; line-height: 1.8; color: #665777; }
+@media (max-width: 1000px) { .workspace .test-library-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .workspace .test-editor { padding: 18px; } .workspace .test-editor textarea.test-source { font-size: 16px; padding: 14px; } .workspace .assessment-request { padding-inline: 18px; } }

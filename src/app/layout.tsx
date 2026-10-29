@@ -12,12 +12,12 @@ export const metadata: Metadata = {
     template: "%s · Patchsentry",
   },
   description:
-    "An AI QA team for your pull requests. Inspect code, run checks, review interfaces, and turn evidence into clear decisions—with no source-code edits.",
+    "Automated product QA for pull requests, CI builds and complete releases. Author tests, choose local or OpenRouter models, and verify evidence before deployment without changing product source.",
   applicationName: "Patchsentry",
   openGraph: {
     title: "Patchsentry — Confidence in every change",
     description:
-      "Your AI QA workspace for pull requests, test evidence, and release decisions. Your code stays yours.",
+      "Your AI QA workspace for product tests, build evidence and pre-deployment decisions. Your code stays yours.",
     siteName: "Patchsentry",
     type: "website",
   },

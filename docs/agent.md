@@ -153,3 +153,11 @@ node scripts/agent.mjs --bot-dir /path/to/qa-signoff-bot --dry-run
 Dry-run validates and summarizes local state without network requests, config writes, or execution of the bot validator. It prints counts, not the report contents, and does not need a portal token. It cannot be combined with watch mode.
 
 For a local website only, set `QA_PORTAL_URL=http://127.0.0.1:3000` and pass `--allow-http-loopback`. Only literal `127.0.0.1` and `[::1]` are accepted for this explicit HTTP exception. Other origins require HTTPS. No inbound agent listener, tunnel, product credential, or product code modification is required.
+
+## Product builds and complete releases
+
+Use the current QA engine and connector. New heartbeat capabilities report locally enrolled release platforms, baseline-suite count and authored-test permission. Older runners remain usable for existing PR work; they cannot silently claim new capabilities.
+
+Extend the local policy with `allowedPlatforms`, `releaseManifestDir`, and `executeBaseline: true`. Manifests are looked up as `<artifactSha256>.json` in that separate trusted directory. A build/release job carries `target: { kind, name, platform, artifactSha256 }` and an exact source `revision`, with no fabricated PR field. The existing fixed bridge, lease, budget caps, output restrictions and report sanitization still apply. See the [engine guide](https://github.com/Vaidehi2510/QA-testbot/blob/main/docs/releases.md).
+
+Authored Node tests require `allowWorkspaceTests: true`. Enabled test sources and SHA-256 digests are frozen into new job payloads, validated, and staged separately from product source. They execute only in the reviewed offline Docker container; they are not commands and never run on the portal or host. Repeated job IDs retain the same test inputs, local policy/configuration, builder manifest and imported-report identity. Changed inputs require a new assessment instead of resetting interrupted paid work.

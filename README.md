@@ -1,6 +1,6 @@
 # Patchsentry
 
-A public product website and private QA workspace for [QA-testbot](https://github.com/Vaidehi2510/QA-testbot). Inspect pull requests, choose OpenRouter or local models, and see required-check scores, blockers, findings, and suggested fixes in one place.
+A public product website and private QA workspace for [QA-testbot](https://github.com/Vaidehi2510/QA-testbot). Assess pull requests, CI builds and complete release versions; author tests; choose OpenRouter or local models; and see required-check scores, blockers, findings, and suggested fixes in one place.
 
 [Visit Patchsentry](https://patchsentry.vercel.app) · [Explore the demo](https://patchsentry.vercel.app/demo) · [Integration guide](https://patchsentry.vercel.app/docs)
 
@@ -15,7 +15,10 @@ The website is the control and reporting interface. The separate QA engine execu
 - A live OpenRouter catalog with context sizes, tool/vision capabilities, and pricing.
 - Local model inventories reported by an outbound connector; the website never contacts users’ localhost servers.
 - A default model or separate model for each of five QA roles, with per-run budget and call limits.
-- Revision-specific PR reports, transparent required-check scores, and unverified AI findings.
+- Revision- and artifact-specific QA reports, transparent required-check scores, and unverified AI findings.
+- Complete-build/release requests with platform, version/build name and artifact SHA-256; fresh-evidence deployment-gate lookup for CI.
+- An owner-scoped unit-test library with versioned drafts, exports, bounded enabled Node tests and immutable per-job snapshots.
+- A public platform coverage page that distinguishes browser/device execution from attested CI imports.
 - A working [outbound runner connector](docs/agent.md) that syncs reports and, with explicit local enrollment, executes immutable website jobs through the reviewed QA engine.
 - Guided preview/browser/goal setup, live runner readiness, and durable exact-SHA job queues with leases, cancellation, dedupe and bounded explicit retries.
 
@@ -107,7 +110,7 @@ Tests use real Better Auth sessions and PostgreSQL-compatible storage. They cove
 - Registering a repository grants no GitHub access. A project token reads its project’s settings, claims locally enrolled jobs and submits reports; it cannot read another account’s data.
 - Report scores are `floor(passed required checks / all required checks × 100)`. No required checks means no score. Failed, blocked, skipped, unsupported, and pending checks cannot count as passed. High-severity AI findings require review even when checks pass.
 - AI findings are unverified suggestions. A score is neither test coverage nor a guarantee that a product is bug-free.
-- Reports include bounded summaries and may contain product information. Source files, patches, raw logs, transcripts, screenshot bytes, and provider keys are excluded. Pattern-based redaction cannot guarantee removal of every sensitive detail.
+- Reports include bounded summaries and may contain product information. Product source files, patches, raw logs, transcripts, screenshot bytes, and provider keys are excluded from report uploads. Test source that you explicitly author in the test library is stored and sent to the enrolled runner when enabled. Pattern-based redaction cannot guarantee removal of every sensitive detail.
 - Detailed evidence stays on the runner. GitHub comments and release decisions remain in the QA engine’s existing workflow.
 - The current engine’s supported execution paths and browser coverage are documented in its repository. This website does not add native-app testing or exhaustive coverage for every technology stack.
 
@@ -116,3 +119,13 @@ Tests use real Better Auth sessions and PostgreSQL-compatible storage. They cove
 Next.js / React → Better Auth → PostgreSQL. Account APIs enforce owner-scoped queries. Separate project tokens are hashed in the database. The runner connects outbound over HTTPS; model inference and test execution stay in the QA engine’s environment. The web server never executes product PR code.
 
 The source is MIT licensed. Provider models, hosting, and runner infrastructure have their own terms and costs.
+
+## Builds, versions and deployment gates
+
+Choose a pull request, CI build or complete release from Overview. Builds/releases need their actual artifact SHA-256, source commit, platform and build/version name. They do not require a PR. Update both the connector and engine, then locally enroll `allowedPlatforms`, `releaseManifestDir` and `executeBaseline` before executing these jobs. The [engine release guide](https://github.com/Vaidehi2510/QA-testbot/blob/main/docs/releases.md) documents the builder manifest, platform suites and the local deployment gate.
+
+The website stores and displays evidence; the engine CLI gate can rehash the private local artifact before deployment. Project-token callers can also query `/api/agent/release-gate` with `recordId`, `revision`, `kind`, `name`, `platform` and `artifactSha256`. That lookup verifies report identity, required gates, findings and one-hour freshness; it cannot inspect the private artifact. CI must invoke the gate before its own deployment command. No product deployment or source edit happens through the portal.
+
+The test library supports Node execution only after local `allowWorkspaceTests: true` enrollment; other framework drafts export to your own CI and JUnit import path. New jobs snapshot enabled test source/digests. Account ownership protects test source, and editing/deleting a saved case cannot alter already queued jobs. At most eight enabled Node tests totaling 96 KB can be included. The source is never executed by the website.
+
+See [platform coverage](https://patchsentry.vercel.app/coverage) and the [sourced comparison](https://github.com/Vaidehi2510/QA-testbot/blob/main/docs/comparison.md) for scope and remaining gaps.

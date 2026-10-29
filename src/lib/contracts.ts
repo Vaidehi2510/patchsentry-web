@@ -1,3 +1,4 @@
+import { AssessmentTargetSchema } from "./targets";
 import { z } from "zod";
 import type { Runner, TestingProfile } from "./jobs";
 
@@ -101,7 +102,8 @@ export const RunInputSchema = z
         number: z.number().int().positive(),
         title: z.string().max(300),
       })
-      .strict(),
+      .strict().optional(),
+    target: AssessmentTargetSchema.optional(),
     revision: z.string().regex(/^[a-fA-F0-9]{40,64}$/),
     createdAt: z.iso.datetime(),
     completedAt: z.iso.datetime().nullable().optional(),
@@ -125,7 +127,7 @@ export const RunInputSchema = z
       .strict(),
     limitations: z.array(z.string().max(600)).max(30),
   })
-  .strict();
+  .strict().refine(v => Boolean(v.pr) !== Boolean(v.target), "Identify one real PR or one build/release target.");
 export type RunInput = z.infer<typeof RunInputSchema>;
 export type Check = z.infer<typeof CheckSchema>;
 export type Finding = z.infer<typeof FindingSchema>;

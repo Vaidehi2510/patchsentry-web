@@ -49,6 +49,7 @@ export function SiteHeader() {
         <nav className="desktop-nav" aria-label="Main navigation">
           <Link href="/#features">Product</Link>
           <Link href="/how-it-works">How it works</Link>
+          <Link href="/coverage">Coverage</Link>
           <Link href="/docs">Docs</Link>
           <Link href="/security">Security</Link>
         </nav>
@@ -81,6 +82,7 @@ export function SiteHeader() {
           {[
             ["Product", "/#features"],
             ["How it works", "/how-it-works"],
+            ["Coverage & releases", "/coverage"],
             ["Documentation", "/docs"],
             ["Security", "/security"],
             ["Log in", "/login"],
@@ -122,6 +124,7 @@ export function SiteFooter() {
             <span>PRODUCT</span>
             <Link href="/#features">Your QA team</Link>
             <Link href="/how-it-works">How it works</Link>
+            <Link href="/coverage">Platforms & release QA</Link>
             <Link href="/demo">Explore the demo</Link>
             <Link href="/signup">Create a workspace</Link>
             <Link href="/#for-you">Personal & team projects</Link>

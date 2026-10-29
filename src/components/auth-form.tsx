@@ -51,7 +51,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       <Link className="wordmark" href="/"><BrandMark />patchsentry<span className="beta-tag">BETA</span></Link>
       <div><span className="eyebrow">FOR YOUR NEXT BIG THING</span><h2>A little less<br />“hope it works.”<br /><em>A lot more proof.</em></h2>
         <p>From your weekend project to your team’s next release. Your code, your models, your decision.</p>
-        <ul className="auth-points"><li><Check size={19} /> Personal and team projects welcome</li><li><Check size={19} /> Browser checks and evidence you can inspect</li><li><Check size={19} /> Your product code stays untouched</li></ul>
+        <ul className="auth-points"><li><Check size={19} /> Personal and team projects welcome</li><li><Check size={19} /> Tests and release evidence you can inspect</li><li><Check size={19} /> Your product code stays untouched</li></ul>
       </div><small><ShieldCheck size={18} /> One secure link. Your own QA workspace.</small>
     </aside>
     <section className="auth-panel">

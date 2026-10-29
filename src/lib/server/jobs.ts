@@ -1,3 +1,5 @@
+import { sameSubject } from "../targets";
+import { enabledUnitTests } from "./test-cases";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { AckSchema, JobInputSchema, JobRequestSchema, LeaseSchema, TestingProfileSchema, jobReportMatches, runnerOnline, testingDefaults, type Job, type JobInput, type Runner } from "../jobs";
 import type { RunInput, Settings } from "../contracts";
@@ -29,15 +31,16 @@ export async function createJob(database: Database, project: QueueProject, body:
   return transaction(database, project.id, async q => {
     const prior = await q<Row>("SELECT * FROM qa_jobs WHERE project_id = $1 AND dedupe_key = $2", [project.id, input.dedupeKey]);
     if (prior.rows[0]) {
-      if (prior.rows[0].payload.pr.number !== input.prNumber || prior.rows[0].payload.revision !== input.revision.toLowerCase()) throw new JobError(409, "An idempotency key cannot change the PR or revision.");
+      if (!sameSubject(prior.rows[0].payload, input.target ? { target: input.target } : { pr: { number: input.prNumber! } }) || prior.rows[0].payload.revision !== input.revision.toLowerCase()) throw new JobError(409, "An idempotency key cannot change the PR or revision.");
       return { job: view(prior.rows[0]), duplicate: true };
     }
     await expire(q, project.id);
     const count = await q<{ total: string; active: string }>("SELECT count(*) AS total, count(*) FILTER (WHERE status IN ('queued','running')) AS active FROM qa_jobs WHERE project_id = $1", [project.id]);
     if (Number(count.rows[0].active) >= 20 || Number(count.rows[0].total) >= 1000) throw new JobError(409, "The project job queue or history limit has been reached.");
     const profile = parse(TestingProfileSchema, project.testing_profile || testingDefaults);
-    const payload = parse(JobInputSchema, { schemaVersion: 1, id: randomUUID(), repository: project.repository, pr: { number: input.prNumber }, revision: input.revision.toLowerCase(), base: profile.baseRef, settings: project.settings, testingProfile: profile });
-    const missing = !profile.previewUrlTemplate ? "Save a preview URL in Testing setup before retrying." : !profile.goals.goals.length ? "Add at least one explicit trusted goal and assertion in Testing setup before retrying." : project.settings.roles.some(role => !project.settings.roleModels[role] && !project.settings.model) ? "Select models for each QA role, then request a new run." : !project.runner?.ready || !runnerOnline(project.agent_last_seen ? iso(project.agent_last_seen) : null) ? "An enrolled ready runner must be online before retrying." : "";
+    const payload = parse(JobInputSchema, { schemaVersion: 1, id: randomUUID(), repository: project.repository, ...(input.target ? { target: input.target } : { pr: { number: input.prNumber } }), unitTests: await enabledUnitTests(q, project.id), revision: input.revision.toLowerCase(), base: profile.baseRef, settings: project.settings, testingProfile: profile });
+    const browserRequired = !input.target || input.target.platform === "web";
+    const missing = input.target?.platform === "web" && profile.previewUrlTemplate.includes("{pr}") ? "Save a build/release preview URL without a PR placeholder; use a fixed staging origin or {sha}." : input.target && !project.runner?.platforms?.includes(input.target.platform) ? "Enroll this build/release platform and its builder manifest on the local runner." : payload.unitTests?.length && !project.runner?.workspaceTests ? "Enroll authored unit tests on the local runner before requesting this run." : browserRequired && !profile.previewUrlTemplate ? "Save a preview URL in Testing setup before retrying." : browserRequired && !profile.goals.goals.length ? "Add at least one explicit trusted goal and assertion in Testing setup before retrying." : project.settings.roles.some(role => !project.settings.roleModels[role] && !project.settings.model) ? "Select models for each QA role, then request a new run." : !project.runner?.ready || !runnerOnline(project.agent_last_seen ? iso(project.agent_last_seen) : null) ? "An enrolled ready runner must be online before retrying." : "";
     // A blocked request is still durable and visible. Profile changes need a new request to preserve immutable input.
     const result = await q<Row>("INSERT INTO qa_jobs (id, project_id, dedupe_key, payload, status, message) VALUES ($1,$2,$3,$4::jsonb,$5,$6) RETURNING *", [payload.id, project.id, input.dedupeKey, JSON.stringify(payload), missing ? "blocked" : "queued", missing]);
     return { job: view(result.rows[0]), duplicate: false };
@@ -54,7 +57,7 @@ export async function changeJob(database: Database, project: QueueProject, id: s
       return view(result.rows[0]);
     }
     if (!["blocked", "failed"].includes(row.status) || row.attempts >= 3) throw new JobError(409, "Only blocked or failed jobs below three attempts can be retried.");
-    if (!row.payload.testingProfile.previewUrlTemplate || !row.payload.testingProfile.goals.goals.length || row.payload.settings.roles.some(role => !row.payload.settings.roleModels[role] && !row.payload.settings.model)) throw new JobError(409, "This immutable job lacks preview expectations or model selection. Save the configuration and request a new run.");
+    if ((!row.payload.target || row.payload.target.platform === "web") && (!row.payload.testingProfile.previewUrlTemplate || !row.payload.testingProfile.goals.goals.length) || row.payload.settings.roles.some(role => !row.payload.settings.roleModels[role] && !row.payload.settings.model)) throw new JobError(409, "This immutable job lacks preview expectations or model selection. Save the configuration and request a new run.");
     if (!project.runner?.ready || !runnerOnline(project.agent_last_seen ? iso(project.agent_last_seen) : null)) throw new JobError(409, "Connect an enrolled ready runner before retrying.");
     const count = await q<{ count: string }>("SELECT count(*) AS count FROM qa_jobs WHERE project_id=$1 AND status IN ('queued','running')", [project.id]);
     if (Number(count.rows[0].count) >= 20) throw new JobError(409, "The project job queue is full.");

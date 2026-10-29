@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { assessmentIdentity, sameAssessment } from "./assessment.mjs";
 /** Outbound connector. Explicit enrollment enables the fixed local QA bridge; no GitHub mutation. */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -166,8 +167,7 @@ export function serializeRun(run) {
     !REPOSITORY.test(run.repository) ||
     run.repository.length > 201 ||
     !SHA.test(run.revision || "") ||
-    !Number.isSafeInteger(run.pr?.number) ||
-    run.pr.number < 1 ||
+    !sameAssessment(run, run) ||
     typeof run.key !== "string" ||
     !run.key ||
     run.key.length > 500
@@ -298,7 +298,7 @@ export function serializeRun(run) {
     schemaVersion: 1,
     recordId,
     repository: run.repository,
-    pr: { number: run.pr.number, title: sanitizeText(run.pr.title, 300) },
+    ...(run.target ? assessmentIdentity(run) : { pr: { number: run.pr.number, title: sanitizeText(run.pr.title, 300) } }),
     revision: run.revision,
     createdAt: date(run.createdAt),
     completedAt: date(run.completedAt, true),

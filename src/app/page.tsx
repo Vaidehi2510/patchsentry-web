@@ -87,21 +87,15 @@ export default function HomePage() {
         <div className="container hero-grid">
           <div className="hero-copy">
             <div className="hero-announcement">
-              <span className="status-pulse" /> YOUR NEXT QA TEAM IS SOFTWARE{" "}
+              <span className="status-pulse" /> QUALITY FOR YOUR WHOLE PRODUCT{" "}
               <ArrowUpRight size={12} />
             </div>
             <h1>
-              Ship the change.
+              Ship your product.
               <br />
-              <span>Catch the risk.</span>
+              <span>With evidence.</span>
             </h1>
-            <p className="hero-description">
-              Your side project. Your startup. Your next release.
-              <br className="desktop-break" /> Inspect code, test the
-              experience, and find the bugs
-              <br className="desktop-break" /> hiding between “it works” and
-              ready to ship.
-            </p>
+            <p className="hero-description">From one pull request to your complete release. Plan checks, run unit and browser tests, investigate findings, and verify the exact build before deployment. Your models. Your code stays yours.</p>
             <div className="hero-cta">
               <Link className="button button-primary" href="/signup">
                 Start building with confidence <ArrowUpRight size={18} />
@@ -141,9 +135,9 @@ export default function HomePage() {
           </div>
           <div>
             <strong>
-              2<span>model backends</span>
+              3<span>assessment types</span>
             </strong>
-            <p>OpenRouter or your local server</p>
+            <p>PRs, CI builds, complete versions</p>
           </div>
           <div>
             <strong>
@@ -398,7 +392,7 @@ export default function HomePage() {
               FROM PULL REQUEST TO CLEAR NEXT STEP
             </span>
             <h2>
-              A review that fits
+              Product QA that fits
               <br />
               the way you already ship.
             </h2>

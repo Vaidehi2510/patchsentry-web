@@ -12,6 +12,16 @@ import { RunInputSchema } from '../src/lib/contracts';
 const revision = 'a'.repeat(40);
 function makeJob() { return { schemaVersion: 1, id: randomUUID(), repository: 'owner/product', pr: { number: 42 }, revision, base: 'main', settings: { backend: 'local', model: 'qa:8b', roles: ['planner'], roleModels: {}, maxCostUsd: 0, maxCallsPerRun: 4, allowImages: false }, testingProfile: { baseRef: 'main', previewUrlTemplate: 'https://preview.example', pages: ['/'], discoverPages: true, maxPages: 4, browsers: ['chromium'], allowMutations: false, visualRegression: false, goals: { schemaVersion: 1, allowSemanticMaintenance: false, goals: [] } } }; }
 function makeReport(job: any) { return { schemaVersion: 1, recordId: 'c'.repeat(64), repository: job.repository, pr: { number: job.pr.number, title: 'Checkout review' }, revision: job.revision, createdAt: new Date().toISOString(), completedAt: new Date().toISOString(), phase: 'completed', checks: [{ id: 'ui', name: 'Checkout goal', method: 'automated', required: true, status: 'failed', details: 'The expected confirmation is absent.' }], findings: [], ai: { backend: 'local', model: 'qa:8b', costUsd: null, costIsEstimate: true, calls: 2 }, limitations: [] }; }
+test('connector preserves build/release identity and rejects cross-version or fabricated-PR reports', () => {
+  const { pr, ...base } = makeJob();
+  const target = { kind: 'release', name: 'v2.0', platform: 'windows', artifactSha256: 'd'.repeat(64) };
+  const job = { ...base, target };
+  const { pr: ignored, ...raw } = makeReport(makeJob());
+  const report = { ...raw, target };
+  const safe = RunInputSchema.parse(sanitizeJobReport(report, job, sanitizeText));
+  assert.deepEqual(safe.target, target); assert.equal(safe.pr, undefined);
+  for (const change of [{ target: { ...target, name: 'v3.0' } }, { target: { ...target, artifactSha256: 'e'.repeat(64) } }, { pr }]) assert.throws(() => sanitizeJobReport({ ...report, ...change }, job, sanitizeText), /exact job/);
+});
 async function fixture(t: any) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'patchsentry-runner-')); t.after(() => fs.rm(root, { recursive: true, force: true }));
   const botDir = path.join(root, 'bot'); await fs.mkdir(path.join(botDir, 'src/autonomy'), { recursive: true });
@@ -85,7 +95,7 @@ test('local origin, repository, browser and model budget limits block jobs befor
 test('lease loss aborts active execution and does not claim a completed result', async t => {
   const f = await fixture(t), p = portal(makeJob()); let aborted = false;
   const baseRequest = p.request; p.request = async (method, endpoint, body) => { if (endpoint.endsWith('/lease')) throw new Error('Lease revoked'); return baseRequest(method, endpoint, body); };
-  const execute = async ({ signal }: any) => new Promise((_, reject) => signal.addEventListener('abort', () => { aborted = true; reject(new Error('Stopped')); }, { once: true }));
+  const execute = async ({ signal }: any) => new Promise((_, reject) => { const stop = () => { aborted = true; reject(new Error('Stopped')); }; if (signal.aborted) stop(); else signal.addEventListener('abort', stop, { once: true }); });
   assert.equal((await runClaimedJob({ ...args(f, p), execute, renewMs: 5 })).status, 'blocked');
   assert.equal(aborted, true); assert.ok(!p.calls.some(c => c.method === 'PUT'));
 });

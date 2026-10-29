@@ -114,6 +114,15 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
   await database.query(
     "CREATE INDEX IF NOT EXISTS qa_runs_project_updated_idx ON qa_runs(project_id, updated_at DESC)",
   );
+  await database.query(`CREATE TABLE IF NOT EXISTS qa_test_cases (
+    id text PRIMARY KEY, project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name text NOT NULL, framework text NOT NULL, source text NOT NULL, enabled boolean NOT NULL DEFAULT false,
+    sha256 text NOT NULL, version integer NOT NULL DEFAULT 1,
+    created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+    CHECK(framework IN ('node','vitest','pytest','junit','dotnet')),
+    CHECK(NOT enabled OR framework='node'), CHECK(octet_length(source) <= 24000)
+  )`);
+  await database.query("CREATE INDEX IF NOT EXISTS qa_test_cases_project_idx ON qa_test_cases(project_id)");
   await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS testing_profile jsonb");
   await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS runner jsonb");
   // Tokens from the password-only beta carry no proof of mailbox ownership.

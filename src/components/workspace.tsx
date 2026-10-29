@@ -1,4 +1,7 @@
 "use client";
+import { subjectLabel, subjectTitle, platformLabels } from "@/lib/targets";
+import { releaseGate } from "@/lib/release-gate";
+import { TestLibrary } from "./test-library";
 import Link from "next/link";
 import { BrandMark } from "./marketing/site-shell";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -29,6 +32,7 @@ import {
   LockKeyhole,
   ExternalLink,
   FileCode2,
+  Code2,
   AlertTriangle,
 } from "lucide-react";
 import type { Project, Run, RunStatus, Settings } from "@/lib/contracts";
@@ -39,11 +43,12 @@ import "./workspace.css";
 import { MotionToggle } from "./motion";
 import { runnerOnline } from "@/lib/jobs";
 
-type Tab = "overview" | "runs" | "models" | "testing" | "integration";
+type Tab = "overview" | "runs" | "models" | "testing" | "integration" | "tests";
 type User = { id: string; name: string; email: string };
 const nav = [
   { id: "overview" as Tab, label: "Overview", icon: LayoutDashboard },
-  { id: "runs" as Tab, label: "PR reports", icon: GitPullRequest },
+  { id: "runs" as Tab, label: "QA reports", icon: GitPullRequest },
+  { id: "tests" as Tab, label: "Test library", icon: Code2 },
   { id: "models" as Tab, label: "Models & agents", icon: SlidersHorizontal },
   { id: "testing" as Tab, label: "Testing setup", icon: FileCode2 },
   { id: "integration" as Tab, label: "Integrations", icon: Plug },
@@ -403,7 +408,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   </span>
                   <h1 id="workspace-title" tabIndex={-1}>
                     {selected
-                      ? `Pull request #${selected.pr.number}`
+                      ? subjectLabel(selected)
                       : tab === "overview"
                         ? "Ship with your eyes open."
                         : tab === "runs"
@@ -414,7 +419,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   </h1>
                   <p>
                     {selected
-                      ? selected.pr.title
+                      ? subjectTitle(selected)
                       : tab === "overview"
                         ? "A clear view of what’s ready, what’s risky, and what needs you."
                         : tab === "runs"
@@ -463,7 +468,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   <p>
                     Bring a personal project or a team product. Create a project, connect a runner, then choose your model and checks.
                     <br />
-                    Results will appear after your first PR check.
+                    Results will appear after your first PR, build, or release assessment.
                   </p>
                   <button
                     className="button button-primary"
@@ -487,7 +492,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                     <>
                       <div className="stat-grid">
                         <Stat
-                          label="PR reports"
+                          label="QA reports"
                           value={runs.length}
                           note="Revision-specific runs"
                           icon={<GitPullRequest size={18} />}
@@ -518,7 +523,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                         <section className="panel reports-panel">
                           <div className="panel-heading">
                             <div>
-                              <h2>Latest pull requests</h2>
+                              <h2>Latest product assessments</h2>
                               <p>The signal behind your next release.</p>
                             </div>
                             <button
@@ -602,7 +607,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                           </strong>
                           <p>
                             {demo
-                              ? "Keep GitHub as your source of truth. Bring QA into every pull request."
+                              ? "Keep GitHub as your source of truth. Bring QA into changes, builds and complete releases."
                               : project.agentLastSeen
                                 ? `Last heartbeat: ${new Date(project.agentLastSeen).toLocaleString()}`
                                 : "The runner reads your product and publishes bounded reports to this workspace."}
@@ -635,6 +640,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                       demo={demo}
                     />
                   )}
+                  {tab === "tests" && <TestLibrary key={project.id} project={project} demo={demo} />}
                   {tab === "models" && (
                     <ModelSettings
                       key={project.id}
@@ -647,7 +653,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                       }
                     />
                   )}
-                  {(tab === "overview" || tab === "runs") && <details className="qa-request-details"><summary><GitPullRequest size={19} /><span>Request a QA run<small>{demo ? "Preview how a request works" : "Choose a pull request and the commit you want tested"}</small></span><ChevronDown size={18} /></summary><JobQueue key={project.id} project={project} demo={demo} runs={runs} openRun={setSelected} refresh={refresh} /></details>}
+                  {(tab === "overview" || tab === "runs") && <details className="qa-request-details"><summary><GitPullRequest size={19} /><span>Request a QA assessment<small>{demo ? "Preview PR, build and release requests" : "Test a pull request, build or complete release version"}</small></span><ChevronDown size={18} /></summary><JobQueue key={project.id} project={project} demo={demo} runs={runs} openRun={setSelected} refresh={refresh} /></details>}
                   {tab === "integration" && (
                     <Integration
                       key={project.id}
@@ -748,7 +754,7 @@ function ProjectSetup({ project, navigate }: { project: Project; navigate: (tab:
   const steps: { title: string; text: string; done: boolean; tab: Tab }[] = [
     { title: "Connect your runner", text: "Keep tests and source access on your own machine or trusted runner.", done: Boolean(project.tokenConfigured && runnerOnline(project.agentLastSeen)), tab: "integration" },
     { title: "Choose your AI", text: "Pick a compatible local model or browse OpenRouter models.", done: Boolean(project.settings.model), tab: "models" },
-    { title: "Define a user journey", text: "Add a preview URL and tell the bot what success should look like.", done: Boolean(project.testingProfile?.previewUrlTemplate && project.testingProfile.goals.goals.length), tab: "testing" },
+    { title: "Define your test coverage", text: "Set browser goals, or enroll API/native suites and CI results for your product.", done: Boolean(project.testingProfile?.previewUrlTemplate && project.testingProfile.goals.goals.length || project.runner?.ready && project.runner.baselineSuites && project.runner.platforms?.some(p => p !== "web")), tab: "testing" },
   ];
   const complete = steps.filter(s => s.done).length;
   if (complete === steps.length) return null;
@@ -797,9 +803,9 @@ function RunTable({
             <GitPullRequest size={20} />
           </span>
           <span className="run-title">
-            <strong>{run.pr.title}</strong>
+            <strong>{subjectTitle(run)}</strong>
             <span>
-              <code>#{run.pr.number}</code>
+              <code>{subjectLabel(run)}</code>
               <span>·</span>
               <span>{run.revision.slice(0, 7)}</span>
               <span>·</span>
@@ -829,7 +835,7 @@ function RunTable({
     <div className="empty-state">
       <GitPullRequest size={24} />
       <h3>No reports yet</h3>
-      <p>Connect a runner and test your first PR to see real results here.</p>
+      <p>Connect a runner and assess a PR, build, or release to see real results here.</p>
     </div>
   );
 }
@@ -851,7 +857,7 @@ function Reports({
   const filtered = runs.filter(
     (r) =>
       (filter === "all" || r.score.status === filter) &&
-      `${r.pr.title} ${r.pr.number} ${r.revision}`
+      `${subjectTitle(r)} ${subjectLabel(r)} ${r.revision}`
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
@@ -861,7 +867,7 @@ function Reports({
         <label className="search-field">
           <Search size={17} />
           <input
-            aria-label="Search PR reports"
+            aria-label="Search QA reports"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by title, PR, or commit…"
@@ -915,19 +921,19 @@ function RunDetail({
       <div className="detail-summary panel">
         <div>
           <Status run={run} />
-          <h2>{run.pr.title}</h2>
+          <h2>{subjectTitle(run)}</h2>
           <p>
             {run.repository} · <code>{run.revision.slice(0, 12)}</code> ·{" "}
             {new Date(run.createdAt).toLocaleString()}
           </p>
           {!demo && (
             <a
-              href={`https://github.com/${run.repository}/pull/${run.pr.number}`}
+              href={run.pr ? `https://github.com/${run.repository}/pull/${run.pr.number}` : `https://github.com/${run.repository}/commit/${run.revision}`}
               target="_blank"
               rel="noreferrer"
               className="text-button"
             >
-              Open pull request <ExternalLink size={14} />
+              {run.pr ? "Open pull request" : "Open source revision"} <ExternalLink size={14} />
             </a>
           )}
         </div>
@@ -936,6 +942,7 @@ function RunDetail({
           <span>check score</span>
         </div>
       </div>
+      {run.target && <section className="panel release-summary"><div><span className="eyebrow">VERSION-LEVEL QA</span><h2>{releaseGate(run, { revision: run.revision, target: run.target }).eligible ? "QA evidence meets the release gate" : "Release gate needs attention"}</h2><p>Platform: {platformLabels[run.target.platform]} · {run.target.kind === 'release' ? 'Version' : 'Build'}: {run.target.name}</p><label>Exact artifact SHA-256<code>{run.target.artifactSha256}</code></label><p className="fineprint">Use the deployment gate against the same artifact before shipping. It never deploys the product or changes its source.</p></div><ul>{releaseGate(run, { revision: run.revision, target: run.target }).reasons.map(reason => <li key={reason}>{reason}</li>)}</ul></section>}
       <div className="detail-grid">
         <section className="panel">
           <div className="panel-heading">
@@ -1222,6 +1229,7 @@ function Integration({
               <h3>Enroll your local runner</h3>
               <p>Create <code>portal-policy.json</code> in the separate bot checkout. Adjust the product path and preview origin, install the selected browsers, and enable the model locally. This website does not provision runner infrastructure.</p>
               <details><summary>Show a conservative local enrollment policy</summary><pre className="code-block"><code>{JSON.stringify({ schemaVersion: 1, repository: project.repository, repoCheckout: "/ABSOLUTE/path/to/product", base: project.testingProfile?.baseRef || "main", allowedPreviewOrigins: ["https://pr-{pr}.preview.example"], allowedBrowsers: ["chromium"], allowedBackends: [project.settings.backend], maxPages: 4, maxGoals: 8, maxAssertions: 30, maxCostUsd: project.settings.maxCostUsd, maxCallsPerRun: project.settings.maxCallsPerRun, allowImages: false, allowMutations: false, allowSemanticMaintenance: false, executeBaseline: false, timeoutMs: 900000, configPath: "qa-config.json", regressionDir: ".qa-regressions" }, null, 2)}</code></pre></details>
+              <details><summary>Enroll build / release QA and authored tests</summary><p>Start with a reviewed baseline test suite and dependency image in the bot configuration. Then explicitly add the platforms you intend to test and a separate builder-manifest directory. Authored tests are optional and always container-isolated.</p><pre className="code-block"><code>{JSON.stringify({ allowedPlatforms: ["web"], releaseManifestDir: ".qa-build-manifests", executeBaseline: true, allowWorkspaceTests: false, allowedPreviewOrigins: ["https://preview.example"] }, null, 2)}</code></pre><p>Set <code>allowWorkspaceTests: true</code> locally only if you want to execute tests explicitly enabled in the website test library. Save CI manifests under their artifact digest. The engine documentation describes the required fields and deployment gate.</p><a className="text-button" href="https://github.com/Vaidehi2510/QA-testbot/blob/main/docs/releases.md" target="_blank" rel="noreferrer">Read build, platform and gate setup <ArrowUpRight size={14}/></a></details>
               <p>Run the offline prerequisite check first:</p><pre className="code-block"><code>{`node scripts/agent.mjs --bot-dir /path/to/QA-testbot --execute-jobs --runner-policy portal-policy.json --check-runner`}</code></pre>
               <p>
                 Clone the website repository on your trusted runner. Set{" "}
@@ -1249,10 +1257,10 @@ function Integration({
           <article>
             <span className="step-number">4</span>
             <div>
-              <h3>Choose the PRs and run QA</h3>
+              <h3>Choose a change, build or release</h3>
               <p>
                 Save a preview URL, browser engines, and trusted goals in Testing setup.
-                Request QA from Overview using the PR number and full commit SHA.
+                Request a PR with its number and commit, or a build/release with its name, platform, exact artifact digest and source commit.
                 Your enrolled runner claims the job, executes the reviewed engine, and uploads results.
                 Missing prerequisites remain blocked; the web server does not execute product code.
               </p>

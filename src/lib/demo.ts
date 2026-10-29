@@ -125,3 +125,15 @@ export const demoRuns: Run[] = scenarios.map((s, i) => {
     receivedAt: input.completedAt!,
   };
 });
+
+// Samples demonstrate assessment types, not actual product test evidence.
+const sampleSources = [...demoRuns];
+for (const [index, kind] of (['build', 'release'] as const).entries()) {
+  const sample = structuredClone(sampleSources[index]);
+  delete sample.pr;
+  sample.recordId = (index ? 'b' : 'e').repeat(64);
+  sample.target = { kind, name: kind === 'release' ? 'v1.4.0' : 'build-842', platform: 'web', artifactSha256: (index ? 'f' : 'd').repeat(64) };
+  sample.checks.unshift(...['release-artifact', 'release-platform', 'release-artifact-stability', 'release-input-stability'].map((id, i) => ({ id, name: ['Built artifact identity', 'Configured platform journeys', 'Artifact unchanged after QA', 'Test inputs unchanged after QA'][i], method: 'automated' as const, required: true, status: 'passed' as const, details: 'Illustrative sample evidence only.' })));
+  sample.score = computeScore(sample);
+  demoRuns.unshift(sample);
+}

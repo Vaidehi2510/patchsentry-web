@@ -13,10 +13,10 @@ const scenarios = {
   },
   team: {
     title: "A clearer handoff. A calmer release.",
-    text: "Review your team's product with repeatable checks and findings tied to each commit. Bring the results into your existing pull-request workflow.",
+    text: "Review your team's changes, builds and complete versions with repeatable checks and findings tied to each artifact. Bring the results into your existing pull-request workflow.",
     bullets: ["Connect an organization repository through your runner", "Choose hosted or local models for the project", "Keep a QA expert involved where judgment matters"],
     project: "Our next product release", branch: "feature/checkout-update", icon: Users,
-    checks: ["Plan checks around this pull request", "Replay the regression journeys", "Share evidence in your existing PR workflow"],
+    checks: ["Review the complete candidate build", "Replay the regression journeys", "Check the release gate before deployment"],
     note: "Project access is managed by its account owner; team invitations are not yet available.",
   },
 };

@@ -1,3 +1,6 @@
+import { releaseGate } from "../release-gate";
+import { AssessmentTargetSchema } from "../targets";
+import { listTestCases, saveTestCase, deleteTestCase } from "./test-cases";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
@@ -320,6 +323,15 @@ async function dispatch(
   }
   if (path.startsWith("/api/agent/")) {
     const project = await agentProject(request, runtime);
+    if (path === "/api/agent/release-gate" && request.method === "GET") {
+      const recordId = url.searchParams.get("recordId") || "";
+      const revision = url.searchParams.get("revision") || "";
+      if (!/^[a-f0-9]{64}$/.test(recordId) || !/^[a-f0-9]{40}$/.test(revision)) throw new ApiError(400, "Provide the report ID and exact source revision.");
+      const target = parse(AssessmentTargetSchema, { kind: url.searchParams.get("kind"), name: url.searchParams.get("name"), platform: url.searchParams.get("platform"), artifactSha256: url.searchParams.get("artifactSha256") });
+      const result = await runtime.database.query<{ payload: Run }>("SELECT payload FROM qa_runs WHERE project_id=$1 AND record_id=$2", [project.id, recordId]);
+      if (!result.rows[0]) throw new ApiError(404, "Release report not found for this project.");
+      return json({ recordId, ...releaseGate(result.rows[0].payload, { revision, target }) });
+    }
     if (path === "/api/agent/config" && request.method === "GET")
       return json({
         schemaVersion: 1,
@@ -433,6 +445,15 @@ async function dispatch(
     if (!jobMatch[2] && request.method === "GET") return json({ jobs: await listJobs(runtime.database, project.id) });
     if (!jobMatch[2] && request.method === "POST") return json(await createJob(runtime.database, project, await readBody(request)), 201);
     if (jobMatch[2] && request.method === "POST") return json({ job: await changeJob(runtime.database, project, jobMatch[2], jobMatch[3] as "retry" | "cancel") });
+    throw new ApiError(405, "Method not allowed.");
+  }
+  const testsMatch = /^\/api\/projects\/([a-f0-9-]{36})\/tests(?:\/([a-f0-9-]{36}))?$/.exec(path);
+  if (testsMatch) {
+    const project = await ownedProject(runtime, testsMatch[1], user.id);
+    if (!testsMatch[2] && request.method === "GET") return json({ tests: await listTestCases(runtime.database, project.id) });
+    if (!testsMatch[2] && request.method === "POST") return json({ test: await saveTestCase(runtime.database, project.id, await readBody(request)) }, 201);
+    if (testsMatch[2] && request.method === "PATCH") return json({ test: await saveTestCase(runtime.database, project.id, await readBody(request), testsMatch[2]) });
+    if (testsMatch[2] && request.method === "DELETE") return json(await deleteTestCase(runtime.database, project.id, testsMatch[2]));
     throw new ApiError(405, "Method not allowed.");
   }
   const projectMatch = /^\/api\/projects\/([a-f0-9-]{36})(?:\/(token|runs))?$/.exec(path);

@@ -1,3 +1,5 @@
+import { AssessmentTargetSchema, sameSubject } from "./targets";
+import { UnitTestSnapshotSchema } from "./test-cases";
 import { z } from "zod";
 import { SettingsSchema, type RunInput } from "./contracts";
 
@@ -48,14 +50,17 @@ export const RunnerSchema = z.object({
   missing: z.array(safeText(240)).max(20), browsers: z.array(z.enum(browsers)).max(3),
   backends: z.array(z.enum(["openrouter", "local"])).max(2), maxPages: z.number().int().min(0).max(8),
   maxCostUsd: z.number().min(0).max(25), maxCallsPerRun: z.number().int().min(0).max(100),
+  platforms: z.array(z.enum(["web", "api", "android", "ios", "macos", "windows", "linux"])).max(7).optional(),
+  workspaceTests: z.boolean().optional(),
+  baselineSuites: z.number().int().min(0).max(60).optional(),
 }).strict().refine(v => !v.ready || v.executeJobs && v.missing.length === 0, "A ready runner must be enrolled and have no missing prerequisites.");
 export type Runner = z.infer<typeof RunnerSchema>;
-export const JobRequestSchema = z.object({ prNumber: z.number().int().positive().max(100000000), revision: z.string().regex(/^[a-fA-F0-9]{40}$/), dedupeKey: z.string().uuid() }).strict();
+export const JobRequestSchema = z.object({ prNumber: z.number().int().positive().max(100000000).optional(), target: AssessmentTargetSchema.optional(), revision: z.string().regex(/^[a-fA-F0-9]{40}$/), dedupeKey: z.string().uuid() }).strict().refine(v => Boolean(v.prNumber) !== Boolean(v.target), "Choose one PR, build or release target.");
 export const JobInputSchema = z.object({
   schemaVersion: z.literal(1), id: z.string().uuid(), repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/).max(201),
-  pr: z.object({ number: z.number().int().positive() }).strict(), revision: z.string().regex(/^[a-f0-9]{40}$/),
+  pr: z.object({ number: z.number().int().positive() }).strict().optional(), target: AssessmentTargetSchema.optional(), unitTests: z.array(UnitTestSnapshotSchema).max(8).refine(v => v.reduce((n, t) => n + new TextEncoder().encode(t.source).length, 0) <= 96000).optional(), revision: z.string().regex(/^[a-f0-9]{40}$/),
   base: z.string().min(1).max(120), settings: SettingsSchema, testingProfile: TestingProfileSchema,
-}).strict();
+}).strict().refine(v => Boolean(v.pr) !== Boolean(v.target), "Identify one PR or build/release target.");
 export type JobInput = z.infer<typeof JobInputSchema>;
 export const jobStatuses = ["queued", "running", "completed", "blocked", "failed", "cancelled"] as const;
 export type JobStatus = typeof jobStatuses[number];
@@ -63,4 +68,4 @@ export type Job = JobInput & { status: JobStatus; attempts: number; createdAt: s
 export const LeaseSchema = z.object({ runnerId: z.string().regex(/^[a-f0-9]{32,64}$/), leaseToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
 export const AckSchema = LeaseSchema.extend({ status: z.enum(["completed", "blocked", "failed"]), recordId: z.string().regex(/^[a-f0-9]{64}$/).optional(), message: safeText(600).default("") }).strict().refine(v => v.status !== "completed" || Boolean(v.recordId));
 export function runnerOnline(lastSeen: string | null | undefined, now = Date.now()) { return !!lastSeen && now - Date.parse(lastSeen) < 90_000 && now >= Date.parse(lastSeen) - 10_000; }
-export function jobReportMatches(job: JobInput, report: RunInput) { return report.repository.toLowerCase() === job.repository.toLowerCase() && report.pr.number === job.pr.number && report.revision.toLowerCase() === job.revision; }
+export function jobReportMatches(job: JobInput, report: RunInput) { return report.repository.toLowerCase() === job.repository.toLowerCase() && sameSubject(report, job) && report.revision.toLowerCase() === job.revision; }
