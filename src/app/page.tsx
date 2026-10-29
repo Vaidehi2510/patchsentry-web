@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { MarketingShell } from "@/components/marketing/site-shell";
 import { ReviewPreview } from "@/components/marketing/review-preview";
+import { UseCases } from "@/components/marketing/use-cases";
 
 const roles = [
   {
@@ -95,7 +96,7 @@ export default function HomePage() {
               <span>Catch the risk.</span>
             </h1>
             <p className="hero-description">
-              A thoughtful QA team for every pull request.
+              Your side project. Your startup. Your next release.
               <br className="desktop-break" /> Inspect code, test the
               experience, and find the bugs
               <br className="desktop-break" /> hiding between “it works” and
@@ -103,7 +104,7 @@ export default function HomePage() {
             </p>
             <div className="hero-cta">
               <Link className="button button-primary" href="/signup">
-                Start your workspace <ArrowUpRight size={16} />
+                Start building with confidence <ArrowUpRight size={18} />
               </Link>
               <Link className="button button-secondary" href="/demo">
                 Explore the demo <ArrowRight size={15} />
@@ -128,9 +129,9 @@ export default function HomePage() {
       <section className="capability-strip" aria-label="Product capabilities">
         <div className="container capability-inner">
           <div className="capability-intro">
-            A smaller team.
+            Built for one.
             <br />
-            <strong>A sharper review.</strong>
+            <strong>Ready for your team.</strong>
           </div>
           <div>
             <strong>
@@ -155,6 +156,7 @@ export default function HomePage() {
           </span>
         </div>
       </section>
+      <UseCases />
       <section id="features" className="section features-section">
         <div className="container">
           <div className="section-heading split-heading">
@@ -474,7 +476,7 @@ export default function HomePage() {
             <br />
             deserves a second look.
           </h2>
-          <p>Bring your product. Build your QA team. Ship with evidence.</p>
+          <p>Personal project or team product. Your next release deserves a closer look.</p>
           <div className="hero-cta">
             <Link href="/signup" className="button button-primary">
               Start your workspace <ArrowUpRight size={16} />

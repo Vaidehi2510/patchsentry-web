@@ -16,10 +16,12 @@ import { handleRequest } from "../src/lib/server/api";
 import type { Runtime } from "../src/lib/server/runtime";
 import { settingsDefaults, type RunInput } from "../src/lib/contracts";
 
+const mailbox = new Map<string, string>();
 const config = {
   secret: "local-test-only-authentication-secret-64-characters-for-tests",
   origin: "http://localhost:3000",
   production: false,
+  sendSignInLink: async ({ email, url }: { email: string; url: string }) => { mailbox.set(email, url); },
 };
 let runtime: Runtime;
 let directory: string;
@@ -63,23 +65,19 @@ async function call(
   return handleRequest(request(path, method, body, options), runtime);
 }
 async function signup(name: string) {
-  const response = await call("/api/auth/sign-up/email", "POST", {
-    name,
-    email: name.toLowerCase() + "@example.test",
-    password: "Correct-horse-local-test-password-42",
-  });
-  assert.equal(
-    response.status,
-    200,
-    JSON.stringify(await response.clone().json()),
-  );
-  const cookies = response.headers
-    .getSetCookie()
-    .map((value) => value.split(";")[0])
-    .join("; ");
+  const email = name.toLowerCase() + "@example.test";
+  const sent = await call("/api/auth/sign-in/magic-link", "POST", { name, email });
+  assert.equal(sent.status, 200, JSON.stringify(await sent.clone().json()));
+  assert.equal(sent.headers.getSetCookie().length, 0);
+  const link = new URL(mailbox.get(email)!);
+  for (const key of ["callbackURL", "newUserCallbackURL", "errorCallbackURL"]) link.searchParams.delete(key);
+  const response = await call(link.pathname + link.search);
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+  const cookies = response.headers.getSetCookie().map(value => value.split(";")[0]).join("; ");
   assert.ok(cookies.includes("session_token"));
   return { cookie: cookies, data: await response.json() };
 }
+
 function report(overrides: Partial<RunInput> = {}): RunInput {
   return {
     schemaVersion: 1,
@@ -131,7 +129,7 @@ after(async () => {
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 
-test("accounts persist as password hashes and sessions identify the correct owner", async () => {
+test("accounts persist only after email verification and sessions identify the correct owner", async () => {
   const response = await call("/api/session", "GET", undefined, {
     cookie: alice,
   });
@@ -143,8 +141,7 @@ test("accounts persist as password hashes and sessions identify the correct owne
     'SELECT password FROM account WHERE "userId" = $1',
     [aliceId],
   );
-  assert.ok(stored.rows[0].password);
-  assert.ok(!stored.rows[0].password.includes("Correct-horse"));
+  assert.equal(stored.rows.length, 0, "Passwordless accounts must not store a password");
   assert.equal((await call("/api/projects")).status, 401);
   assert.equal((await call("/api/session")).status, 200);
   assert.equal((await (await call("/api/session")).json()).user, null);
@@ -239,9 +236,9 @@ test("cookie-authenticated mutations require exact Origin and strict body schema
   assert.equal(
     (
       await call(
-        "/api/auth/sign-in/email",
+        "/api/auth/sign-in/magic-link",
         "POST",
-        { email: "alice@example.test", password: "secret" },
+        { email: "alice@example.test" },
         { origin: "https://evil.test" },
       )
     ).status,
@@ -803,29 +800,16 @@ test("deleting a project deletes only its reports and revokes its agent access",
   );
 });
 
-test("email login verifies credentials and database rate limits survive restart", async () => {
-  const successful = await call("/api/auth/sign-in/email", "POST", {
-    email: "alice@example.test",
-    password: "Correct-horse-local-test-password-42",
-  });
-  assert.equal(successful.status, 200);
-  const login = () =>
-    call("/api/auth/sign-in/email", "POST", {
-      email: "alice@example.test",
-      password: "Incorrect-long-password-42",
-    });
-  assert.equal((await login()).status, 401);
+test("email-link requests use persistent database rate limits", async () => {
+  const login = () => call("/api/auth/sign-in/magic-link", "POST", { email: "alice@example.test" });
+  assert.equal((await login()).status, 200);
   let last: Response | undefined;
-  for (let index = 0; index < 8; index++) last = await login();
+  for (let index = 0; index < 5; index++) last = await login();
   assert.equal(last?.status, 429);
-  const counts = await runtime.database.query<{ count: string }>(
-    'SELECT count(*) AS count FROM "rateLimit"',
-  );
+  const counts = await runtime.database.query<{ count: string }>('SELECT count(*) AS count FROM "rateLimit"');
   assert.ok(Number(counts.rows[0].count) > 0);
   await runtime.database.end();
-  const database = await createPGliteDatabase(
-    join(directory, "fresh-parent", "database"),
-  );
+  const database = await createPGliteDatabase(join(directory, "fresh-parent", "database"));
   runtime = { database, auth: createAuth(database, config), config };
   assert.equal((await login()).status, 429);
 });
@@ -860,7 +844,7 @@ test("production fails closed without persistent credentials and cannot use PGli
     /not configured/,
   );
   const response = await handleRequest(request("/api/session"), null);
-  assert.deepEqual(await response.json(), { user: null, configured: false });
+  assert.deepEqual(await response.json(), { user: null, configured: false, emailSignInReady: false });
   assert.equal(
     (await handleRequest(request("/api/projects"), null)).status,
     503,

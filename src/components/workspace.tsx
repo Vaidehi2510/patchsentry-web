@@ -36,6 +36,8 @@ import { demoProject, demoRuns } from "@/lib/demo";
 import { ModelSettings } from "./model-settings";
 import { TestingSetup, JobQueue, RunnerStatus } from "./testing-setup";
 import "./workspace.css";
+import { MotionToggle } from "./motion";
+import { runnerOnline } from "@/lib/jobs";
 
 type Tab = "overview" | "runs" | "models" | "testing" | "integration";
 type User = { id: string; name: string; email: string };
@@ -107,8 +109,30 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     [mobile, setMobile] = useState(false),
     [busy, setBusy] = useState(false);
   const project = projects.find((p) => p.id === projectId);
+  const dialogReturnFocus = useRef<HTMLElement | null>(null);
+  function openProject() {
+    dialogReturnFocus.current = document.activeElement as HTMLElement | null;
+    setCreating(true);
+  }
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
   const projectRef = useRef(projectId);
   projectRef.current = projectId;
+  useEffect(() => {
+    if (!creating) return;
+    const previous = dialogReturnFocus.current;
+    const dialog = document.querySelector<HTMLElement>(".workspace [role=dialog]");
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busyRef.current) { event.preventDefault(); setCreating(false); }
+      if (event.key !== "Tab" || !dialog) return;
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]')).filter(el => el.getClientRects().length);
+      const first = controls[0], last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("keydown", onKey); if (previous?.isConnected) previous.focus(); };
+  }, [creating]);
   useEffect(() => {
     if (demo) return;
     let alive = true;
@@ -162,6 +186,10 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     setSelected(null);
     setMobile(false);
     history.replaceState(null, "", `${demo ? "/demo" : "/app"}?tab=${next}`);
+    requestAnimationFrame(() => {
+      document.getElementById("workspace-title")?.focus({ preventScroll: true });
+      window.scrollTo({ top: 0, behavior: "instant" });
+    });
   }
   async function refresh() {
     if (demo) return;
@@ -202,7 +230,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       setProjects((v) => [...v, p]);
       setProjectId(p.id);
       setCreating(false);
-      go("integration");
+      go("overview");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -329,6 +357,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             <strong>{nav.find((n) => n.id === tab)?.label}</strong>
           </div>
           <div>
+            <MotionToggle />
             <span className="version-tag">PUBLIC BETA</span>
             <Link href="/docs" className="icon-link" aria-label="Documentation">
               <BookOpen size={18} />
@@ -372,7 +401,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   <span className="eyebrow">
                     {demo ? "THE BIG PICTURE" : "YOUR QUALITY WORKSPACE"}
                   </span>
-                  <h1>
+                  <h1 id="workspace-title" tabIndex={-1}>
                     {selected
                       ? `Pull request #${selected.pr.number}`
                       : tab === "overview"
@@ -417,7 +446,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   <button
                     className="button button-primary"
                     onClick={() =>
-                      demo ? location.assign("/signup") : setCreating(true)
+                      demo ? location.assign("/signup") : openProject()
                     }
                   >
                     <Plus size={16} />
@@ -432,14 +461,13 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   </span>
                   <h2>Your first product starts here.</h2>
                   <p>
-                    Create a project, select your model, and connect a QA
-                    runner.
+                    Bring a personal project or a team product. Create a project, connect a runner, then choose your model and checks.
                     <br />
                     Results will appear after your first PR check.
                   </p>
                   <button
                     className="button button-primary"
-                    onClick={() => setCreating(true)}
+                    onClick={openProject}
                   >
                     Create a project <ArrowRight size={16} />
                   </button>
@@ -453,7 +481,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                 />
               ) : (
                 <>
-                  {(tab === "overview" || tab === "runs") && <JobQueue key={project.id} project={project} demo={demo} runs={runs} openRun={setSelected} refresh={refresh} />}
+                  {!demo && tab === "overview" && <ProjectSetup project={project} navigate={go} />}
                   {tab === "testing" && <TestingSetup key={project.id} project={project} demo={demo} onSaved={value => setProjects(items => items.map(p => p.id === value.id ? value : p))} />}
                   {tab === "overview" && (
                     <>
@@ -619,6 +647,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                       }
                     />
                   )}
+                  {(tab === "overview" || tab === "runs") && <details className="qa-request-details"><summary><GitPullRequest size={19} /><span>Request a QA run<small>{demo ? "Preview how a request works" : "Choose a pull request and the commit you want tested"}</small></span><ChevronDown size={18} /></summary><JobQueue key={project.id} project={project} demo={demo} runs={runs} openRun={setSelected} refresh={refresh} /></details>}
                   {tab === "integration" && (
                     <Integration
                       key={project.id}
@@ -657,6 +686,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             <button
               className="modal-close"
               aria-label="Close"
+              disabled={busy}
               onClick={() => setCreating(false)}
             >
               <X size={20} />
@@ -685,9 +715,12 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   required
                   pattern="[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"
                   maxLength={201}
-                  placeholder="your-org/your-product"
+                  placeholder="your-username/your-project"
                 />
               </label>
+              <p className="fineprint">
+                Personal repositories and organization repositories both work. Public or private, you choose the access on your runner.
+              </p>
               <p className="fineprint">
                 <LockKeyhole size={14} /> This does not grant GitHub access or
                 change repository permissions.
@@ -710,6 +743,16 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       )}
     </div>
   );
+}
+function ProjectSetup({ project, navigate }: { project: Project; navigate: (tab: Tab) => void }) {
+  const steps: { title: string; text: string; done: boolean; tab: Tab }[] = [
+    { title: "Connect your runner", text: "Keep tests and source access on your own machine or trusted runner.", done: Boolean(project.tokenConfigured && runnerOnline(project.agentLastSeen)), tab: "integration" },
+    { title: "Choose your AI", text: "Pick a compatible local model or browse OpenRouter models.", done: Boolean(project.settings.model), tab: "models" },
+    { title: "Define a user journey", text: "Add a preview URL and tell the bot what success should look like.", done: Boolean(project.testingProfile?.previewUrlTemplate && project.testingProfile.goals.goals.length), tab: "testing" },
+  ];
+  const complete = steps.filter(s => s.done).length;
+  if (complete === steps.length) return null;
+  return <section className="setup-checklist" aria-labelledby="setup-title"><div className="setup-checklist-heading"><div><span className="eyebrow">YOUR FIRST REVIEW, STEP BY STEP</span><h2 id="setup-title">Let’s connect the pieces.</h2><p>Personal project or team product—the setup is the same.</p></div><span>{complete} of 3 ready</span></div><div className="setup-checklist-grid">{steps.map((step, i) => <button key={step.tab} onClick={() => navigate(step.tab)}><span className={step.done ? "setup-done" : ""}>{step.done ? <Check size={18} /> : String(i + 1).padStart(2, "0")}</span><strong>{step.title}</strong><p>{step.text}</p><span className="setup-link">{step.done ? "Review setup" : "Get started"}<ArrowRight size={16} /></span></button>)}</div></section>;
 }
 function Stat({
   label,

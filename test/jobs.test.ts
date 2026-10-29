@@ -11,7 +11,8 @@ import type { Runtime } from '../src/lib/server/runtime';
 import { TestingProfileSchema, JobInputSchema, runnerOnline } from '../src/lib/jobs';
 import { settingsDefaults } from '../src/lib/contracts';
 
-const config = { secret: 'job-tests-only-secret-with-at-least-32-characters', origin: 'https://portal.example', production: false };
+const mailbox = new Map<string, string>();
+const config = { secret: 'job-tests-only-secret-with-at-least-32-characters', origin: 'https://portal.example', production: false, sendSignInLink: async ({ email, url }: { email: string; url: string }) => { mailbox.set(email, url); } };
 let runtime: Runtime, directory: string, alice: string, bob: string;
 const runner = { id: 'b'.repeat(64), executeJobs: true, ready: true, missing: [], browsers: ['chromium'], backends: ['local'], maxPages: 4, maxCostUsd: 2, maxCallsPerRun: 20 };
 const profile = TestingProfileSchema.parse({ previewUrlTemplate: 'https://pr-{pr}.example.test', goals: { schemaVersion: 1, goals: [
@@ -20,7 +21,15 @@ const profile = TestingProfileSchema.parse({ previewUrlTemplate: 'https://pr-{pr
 async function call(endpoint: string, method = 'GET', body?: unknown, cookie?: string, token?: string) {
   return handleRequest(new Request(config.origin + endpoint, { method, headers: { origin: config.origin, 'content-type': 'application/json', ...(cookie ? { cookie } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), runtime);
 }
-async function signup(name: string) { const result = await call('/api/auth/sign-up/email', 'POST', { name, email: `${name}@example.test`, password: 'Fixture-user-password-only-12345' }); assert.equal(result.status, 200); return result.headers.getSetCookie().map(v => v.split(';')[0]).join('; '); }
+async function signup(name: string) {
+  const email = `${name}@example.test`;
+  const sent = await call('/api/auth/sign-in/magic-link', 'POST', { name, email });
+  assert.equal(sent.status, 200);
+  const link = new URL(mailbox.get(email)!);
+  const result = await call(link.pathname + link.search);
+  assert.equal(result.status, 302);
+  return result.headers.getSetCookie().map(v => v.split(';')[0]).join('; ');
+}
 async function project(ready = true) {
   const created = await call('/api/projects', 'POST', { name: 'Test project', repository: `owner/product-${randomUUID()}` }, alice);
   const value = (await created.json()).project; assert.ok(value.id);

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowUpRight, Github, Menu, X } from "lucide-react";
 import { useState } from "react";
+import { MotionToggle } from "../motion";
 
 export function BrandMark({
   className = "",
@@ -52,6 +53,7 @@ export function SiteHeader() {
           <Link href="/security">Security</Link>
         </nav>
         <div className="header-actions">
+          <MotionToggle />
           <Link href="/login" className="login-link">
             Log in
           </Link>
@@ -59,6 +61,7 @@ export function SiteHeader() {
             Get started <ArrowUpRight size={14} />
           </Link>
         </div>
+        <span className="mobile-motion-control"><MotionToggle /></span>
         <button
           className="mobile-menu-button"
           onClick={() => setOpen(!open)}
@@ -121,6 +124,7 @@ export function SiteFooter() {
             <Link href="/how-it-works">How it works</Link>
             <Link href="/demo">Explore the demo</Link>
             <Link href="/signup">Create a workspace</Link>
+            <Link href="/#for-you">Personal & team projects</Link>
           </div>
           <div className="footer-column">
             <span>RESOURCES</span>
@@ -148,6 +152,7 @@ export function SiteFooter() {
             <span /> Models investigate. Evidence decides.
           </span>
           <span>Built for thoughtful shipping.</span>
+          <MotionToggle />
         </div>
       </div>
     </footer>

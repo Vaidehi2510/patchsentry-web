@@ -1,11 +1,14 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
+import { magicLink } from "better-auth/plugins";
+import { gmailSender, type SendSignInLink } from "./email";
 import type { Database } from "./database";
 
 export interface AuthConfig {
   secret: string;
   origin: string;
   production: boolean;
+  sendSignInLink?: SendSignInLink;
 }
 
 export function authConfig(
@@ -34,7 +37,7 @@ export function authConfig(
     throw new Error("BETTER_AUTH_URL must be an exact site origin");
   if (production && (url.protocol !== "https:" || !env.DATABASE_URL))
     throw new Error("Production requires HTTPS and DATABASE_URL");
-  return { secret: env.BETTER_AUTH_SECRET, origin: url.origin, production };
+  return { secret: env.BETTER_AUTH_SECRET, origin: url.origin, production, sendSignInLink: gmailSender(url.origin, env) };
 }
 
 export function authOptions(
@@ -42,18 +45,22 @@ export function authOptions(
   config: AuthConfig,
 ): BetterAuthOptions {
   return {
-    appName: "PatchSentry",
+    appName: "Patchsentry",
     baseURL: config.origin,
     basePath: "/api/auth",
     secret: config.secret,
     database: database as unknown as NonNullable<BetterAuthOptions["database"]>,
     trustedOrigins: [config.origin],
-    emailAndPassword: {
-      enabled: true,
-      minPasswordLength: 12,
-      maxPasswordLength: 128,
-      autoSignIn: true,
-    },
+    emailAndPassword: { enabled: false },
+    plugins: [magicLink({
+      expiresIn: 600,
+      storeToken: "hashed",
+      rateLimit: { window: 60, max: 5 },
+      async sendMagicLink(message) {
+        if (!config.sendSignInLink) throw new Error("Email sign-in is not configured.");
+        await config.sendSignInLink(message);
+      },
+    })],
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
     rateLimit: {
       enabled: true,
@@ -61,8 +68,8 @@ export function authOptions(
       window: 60,
       max: 100,
       customRules: {
-        "/sign-in/email": { window: 60, max: 8 },
-        "/sign-up/email": { window: 60, max: 5 },
+        "/sign-in/magic-link": { window: 60, max: 3 },
+        "/magic-link/verify": { window: 60, max: 10 },
       },
     },
     advanced: {
@@ -109,6 +116,9 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
   );
   await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS testing_profile jsonb");
   await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS runner jsonb");
+  // Tokens from the password-only beta carry no proof of mailbox ownership.
+  // Keep those tokens unusable even after the mailbox owner verifies the account.
+  await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS agent_email_verified boolean NOT NULL DEFAULT false");
   await database.query(`CREATE TABLE IF NOT EXISTS qa_jobs (
     id text PRIMARY KEY, project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     dedupe_key text NOT NULL, payload jsonb NOT NULL, status text NOT NULL DEFAULT 'queued',

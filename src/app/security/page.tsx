@@ -18,6 +18,12 @@ import { MarketingShell, PageIntro } from "@/components/marketing/site-shell";
 export const metadata: Metadata = { title: "Security & boundaries" };
 const boundaries = [
   {
+    icon: LockKeyhole,
+    title: "Your inbox is your sign-in key.",
+    text: "Personal, school, and work addresses are welcome. Your account is created only after you open a secure email link. Each link expires after ten minutes and can be used once.",
+    detail: "Sign-in links are delivered through the configured email sender. Verification tokens are stored hashed; SMTP credentials stay on the server. Older unverified sessions cannot access your projects.",
+  },
+  {
     icon: Code2,
     title: "Your product code stays untouched.",
     text: "The QA engine reads repository snapshots. It does not commit fixes, push branches, merge PRs, or install generated tests into your product. Suggested fixes remain reviewable findings.",

@@ -50,6 +50,7 @@ type ProjectRow = {
   agent_last_seen: Date | string | null;
   local_models: LocalModel[];
   agent_token_hash: string | null;
+  agent_email_verified: boolean;
   testing_profile?: TestingProfile;
   runner?: Runner | null;
 };
@@ -83,7 +84,7 @@ function projectView(row: ProjectRow): Project {
     settings: row.settings,
     agentLastSeen: row.agent_last_seen ? iso(row.agent_last_seen) : null,
     localModels: row.local_models,
-    tokenConfigured: Boolean(row.agent_token_hash),
+    tokenConfigured: Boolean(row.agent_token_hash && row.agent_email_verified),
     testingProfile: row.testing_profile || testingDefaults,
     runner: row.runner || null,
   };
@@ -168,6 +169,7 @@ async function userFor(request: Request, runtime: Runtime) {
     headers: request.headers,
   });
   if (!session?.user) throw new ApiError(401, "Sign in to continue.");
+  if (!session.user.emailVerified) throw new ApiError(401, "Verify your email with a new sign-in link to continue.");
   return session.user;
 }
 async function ownedProject(
@@ -193,7 +195,7 @@ async function agentProject(
   if (!/^Bearer pst_[A-Za-z0-9_-]{43}$/.test(authorization))
     throw new ApiError(401, "A valid project agent token is required.");
   const result = await runtime.database.query<ProjectRow>(
-    "SELECT * FROM projects WHERE agent_token_hash = $1",
+    'SELECT projects.* FROM projects JOIN "user" owner ON owner.id=projects.owner_id WHERE projects.agent_token_hash = $1 AND projects.agent_email_verified = true AND owner."emailVerified" = true',
     [hashToken(authorization.slice(7))],
   );
   if (!result.rows[0])
@@ -270,12 +272,12 @@ async function dispatch(
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/$/, "");
   if (path === "/api/session" && request.method === "GET") {
-    if (!runtime) return json({ user: null, configured: false });
+    if (!runtime) return json({ user: null, configured: false, emailSignInReady: false });
     const session = await runtime.auth.api.getSession({
       headers: request.headers,
     });
     return json({
-      user: session?.user
+      user: session?.user.emailVerified
         ? {
             id: session.user.id,
             name: session.user.name,
@@ -283,6 +285,7 @@ async function dispatch(
           }
         : null,
       configured: true,
+      emailSignInReady: Boolean(runtime.config.sendSignInLink),
     });
   }
   if (!runtime)
@@ -291,11 +294,18 @@ async function dispatch(
       "Account storage is not configured. Set the database and authentication environment variables.",
     );
   if (path.startsWith("/api/auth/")) {
+    const allowed = new Set(["POST /api/auth/sign-in/magic-link", "GET /api/auth/magic-link/verify", "POST /api/auth/sign-out"]);
+    if (!allowed.has(`${request.method} ${path}`)) throw new ApiError(404, "Use a verified email link to sign in.");
     if (!["GET", "POST"].includes(request.method))
       throw new ApiError(405, "Method not allowed.");
     if (request.method === "POST") {
       requireOrigin(request, runtime.config.origin);
-      const body = await readBody(request);
+      let body = await readBody(request);
+      if (path === "/api/auth/sign-in/magic-link") {
+        if (!runtime.config.sendSignInLink) throw new ApiError(503, "Email sign-in is being connected. You can explore the demo in the meantime.");
+        const input = parse(z.object({ email: z.email().max(254).transform(v => v.toLowerCase()), name: z.string().trim().min(1).max(100).optional() }).strict(), body);
+        body = { ...input, name: input.name || input.email.split("@")[0].slice(0, 100), callbackURL: "/app", newUserCallbackURL: "/app", errorCallbackURL: "/login" };
+      }
       const headers = new Headers(request.headers);
       headers.delete("content-length");
       return runtime.auth.handler(
@@ -431,7 +441,7 @@ async function dispatch(
     if (projectMatch[2] === "token" && request.method === "POST") {
       const token = "pst_" + randomBytes(32).toString("base64url");
       await runtime.database.query(
-        "UPDATE projects SET agent_token_hash = $1, runner=NULL, agent_last_seen=NULL, updated_at = now() WHERE id = $2 AND owner_id = $3",
+        "UPDATE projects SET agent_token_hash = $1, agent_email_verified=true, runner=NULL, agent_last_seen=NULL, updated_at = now() WHERE id = $2 AND owner_id = $3",
         [hashToken(token), project.id, user.id],
       );
       await runtime.database.query("UPDATE qa_jobs SET status='blocked', lease_hash=NULL, lease_expires_at=NULL, message='Runner token rotated. Enroll the replacement token before retrying.', updated_at=now() WHERE project_id=$1 AND status='running'", [project.id]);

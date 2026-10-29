@@ -124,10 +124,12 @@ test('authenticated website job flows through the real connector and process bac
   const f = await fixture(t);
   await fs.writeFile(f.bot.configPath, JSON.stringify({ ai: { enabled: true, backend: 'local', local: { models: [{ id: 'qa:8b', contextLength: 8192, tools: true, vision: false }] } } }));
   const database = await createPGliteDatabase(); t.after(() => database.end());
-  const config = { origin: 'https://portal.example', secret: 'runner-integration-only-secret-at-least-32-characters', production: false };
+  let deliveredLink = '';
+  const config = { origin: 'https://portal.example', secret: 'runner-integration-only-secret-at-least-32-characters', production: false, sendSignInLink: async ({ url }: { url: string }) => { deliveredLink = url; } };
   await migrateDatabase(database, config); const runtime = { database, config, auth: createAuth(database, config) };
   const request = (endpoint: string, method: string, body?: unknown, cookie?: string) => handleRequest(new Request(config.origin + endpoint, { method, headers: { origin: config.origin, 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), runtime);
-  const signup = await request('/api/auth/sign-up/email', 'POST', { name: 'Runner owner', email: 'runner@example.test', password: 'Runner-integration-fixture-password-123' }); assert.equal(signup.status, 200);
+  const sent = await request('/api/auth/sign-in/magic-link', 'POST', { name: 'Runner owner', email: 'runner@example.test' }); assert.equal(sent.status, 200);
+  const link = new URL(deliveredLink); const signup = await request(link.pathname + link.search, 'GET'); assert.equal(signup.status, 302);
   const cookie = signup.headers.getSetCookie().map(v => v.split(';')[0]).join('; ');
   const created = await request('/api/projects', 'POST', { name: 'Runner integration', repository: 'owner/product' }, cookie); const project = (await created.json()).project;
   const issued = await request(`/api/projects/${project.id}/token`, 'POST', {}, cookie); const token = (await issued.json()).token;

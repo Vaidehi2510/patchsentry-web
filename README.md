@@ -10,7 +10,7 @@ The website is the control and reporting interface. The separate QA engine execu
 
 - Responsive product, workflow, security, and integration documentation pages.
 - A clearly labeled interactive demo; demo metrics never appear as real customer results.
-- Persistent email/password accounts, secure session cookies, and database-backed login rate limits.
+- Verified, passwordless email-link accounts, secure session cookies, and database-backed login rate limits. Accounts are created only after a link is verified.
 - Account-scoped projects, reports, model settings, and one-time runner enrollment tokens.
 - A live OpenRouter catalog with context sizes, tool/vision capabilities, and pricing.
 - Local model inventories reported by an outbound connector; the website never contacts users’ localhost servers.
@@ -65,8 +65,24 @@ Deploy this repository as a Next.js application. Vercel configuration is detecte
 | `DATABASE_URL`       | PostgreSQL connection string with TLS     |
 | `BETTER_AUTH_URL`    | Exact public HTTPS origin, without a path |
 | `BETTER_AUTH_SECRET` | Random secret of at least 32 characters   |
+| `SMTP_USER` | Dedicated Gmail sender address |
+| `SMTP_PASSWORD` | Google app password for that sender; never its ordinary password |
 
 Run `npm run db:migrate` with these variables exported, then deploy. Migrations do not run during ordinary API requests. Production fails closed if persistent account storage is unavailable; the public product site and demo remain available.
+
+The Vercel build wrapper runs the reviewed migrations inside the production build, using Vercel's protected environment variables before publishing the new application. Preview builds skip that step. Sensitive Vercel values do not need to be exported to a developer's machine. Other hosting providers should run `npm run db:migrate` as a deployment preparation step.
+
+### Email setup
+
+Personal, school, and work email addresses can all create accounts. No company domain is required. A user requests a link, receives a branded email, then opens its single-use link within ten minutes. Requesting a link does not create a user or session. Password registration and password login are disabled. Existing unverified accounts must prove inbox ownership; their previous sessions are revoked when they verify. Existing beta project tokens must be regenerated in Integrations after verification. Projects and reports are preserved; a token issued before mailbox verification cannot regain access after the account is verified.
+
+For a free beta sender without purchasing a domain, create a dedicated Gmail account, enable 2-Step Verification, and generate an app password at <https://myaccount.google.com/apppasswords>. Add `SMTP_USER` and `SMTP_PASSWORD` directly in the hosting provider's server-only environment settings. Gmail SMTP uses authenticated TLS on port 465. Never commit these values or add a `NEXT_PUBLIC_` prefix. Gmail applies its own delivery limits; use a dedicated transactional provider for a larger rollout. Resend can be added later with a domain you control.
+
+If mail delivery is unconfigured, signup and login show a clear setup notice and link to the interactive demo. Delivery failures cannot create accounts or pretend to have sent a link. Verification tokens are stored hashed, expire in ten minutes, and are consumed atomically. Automated tests capture email in memory; production has no console-mail or verification bypass.
+
+### Readability and motion
+
+The sage and lavender interface supports independent builders and team-owned products. Inputs use at least 16px text, common controls have larger tap targets, and responsive layouts preserve readable text on mobile. Scroll reveals, workflow signals, and preview animations have a persistent pause control and honor `prefers-reduced-motion`. Content remains visible without animation support. Team products are managed by the project account owner; shared membership and invitations are not implemented.
 
 Never deploy with `PGLITE_DATA_DIR`. Vercel serverless disk is not a persistent database. Keep preview deployments separate from production data and configure their own exact auth origin when enabling accounts there.
 
@@ -87,7 +103,7 @@ Tests use real Better Auth sessions and PostgreSQL-compatible storage. They cove
 ## Boundaries of this release
 
 - No unattended QA service is provisioned by signing up. A trusted runner and the QA engine must be configured for each product.
-- Email verification, password-recovery email delivery, billing, team invitations, and GitHub OAuth installation are not enabled in this beta. Save your password securely. Accounts do not establish verified email or repository ownership.
+- Email links establish inbox ownership, not repository ownership. Billing, team invitations, and GitHub OAuth installation are not enabled in this beta. Password recovery is unnecessary for passwordless accounts.
 - Registering a repository grants no GitHub access. A project token reads its project’s settings, claims locally enrolled jobs and submits reports; it cannot read another account’s data.
 - Report scores are `floor(passed required checks / all required checks × 100)`. No required checks means no score. Failed, blocked, skipped, unsupported, and pending checks cannot count as passed. High-severity AI findings require review even when checks pass.
 - AI findings are unverified suggestions. A score is neither test coverage nor a guarantee that a product is bug-free.

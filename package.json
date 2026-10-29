@@ -16,17 +16,19 @@
     "node": "24.x"
   },
   "dependencies": {
+    "better-auth": "1.7.6",
+    "lucide-react": "^0.577.0",
     "next": "16.3.7",
+    "nodemailer": "10.3.1",
+    "pg": "^8.20.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "better-auth": "1.7.6",
-    "pg": "^8.20.0",
-    "lucide-react": "^0.577.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.15",
     "@types/node": "^22.19.0",
+    "@types/nodemailer": "8.0.2",
     "@types/pg": "^8.18.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

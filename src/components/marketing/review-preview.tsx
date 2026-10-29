@@ -59,7 +59,7 @@ export function ReviewPreview() {
         <div className="preview-topbar">
           <div className="preview-avatar">A</div>
           <span>
-            Acme Store <ChevronDown size={11} />
+            My storefront <ChevronDown size={14} />
           </span>
           <span className="sample-label">SAMPLE REVIEW</span>
         </div>

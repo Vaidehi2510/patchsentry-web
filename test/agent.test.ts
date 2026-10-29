@@ -726,7 +726,9 @@ test(
     const { botDir, options } = await fixture(t);
     const database = await createPGliteDatabase();
     t.after(() => database.end());
+    let deliveredLink = "";
     const config = {
+      sendSignInLink: async ({ url }: { url: string }) => { deliveredLink = url; },
       origin: "https://portal.example",
       secret: "agent-integration-test-only-secret-at-least-32-characters",
       production: false,
@@ -751,12 +753,14 @@ test(
         }),
         runtime,
       );
-    const signup = await call("/api/auth/sign-up/email", "POST", {
+    const sent = await call("/api/auth/sign-in/magic-link", "POST", {
       name: "Agent owner",
       email: "agent-owner@example.test",
-      password: "Agent-fixture-only-password-1234",
     });
-    assert.equal(signup.status, 200);
+    assert.equal(sent.status, 200);
+    const link = new URL(deliveredLink);
+    const signup = await call(link.pathname + link.search, "GET");
+    assert.equal(signup.status, 302);
     const cookie = signup.headers
       .getSetCookie()
       .map((value) => value.split(";")[0])
