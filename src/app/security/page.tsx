@@ -32,10 +32,10 @@ const boundaries = [
   },
   {
     icon: KeyRound,
-    title: "Model credentials stay server-side.",
-    text: "OpenRouter and local-model keys belong in the engine’s environment. The local model dashboard reports whether a credential is configured; it does not return the credential to the browser.",
+    title: "Model credentials are protected.",
+    text: "Use runner environment variables or the owner/admin connection setup. Setup verifies OpenRouter keys over HTTPS and encrypts credentials to the selected runner. The portal does not persist plaintext keys or return saved keys to the browser.",
     detail:
-      "Do not put model keys in repository files, browser fields, or uploaded reports.",
+      "Enter keys only in the authenticated connection-setup field or your runner secret manager. Keep them out of repository files, chat and uploaded reports.",
   },
   {
     icon: Server,

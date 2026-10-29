@@ -12,7 +12,7 @@ The website is the control and reporting interface. The separate QA engine execu
 - A clearly labeled interactive demo; demo metrics never appear as real customer results.
 - Email-first signup followed by mandatory password and two-factor enrollment; password plus second factor on every new login. Secure cookies, server-side session assurance and database-backed rate limits.
 - Account-scoped projects, reports, model settings, and one-time runner enrollment tokens.
-- A live OpenRouter catalog with context sizes, tool/vision capabilities, and pricing.
+- A live OpenRouter catalog with context sizes, tool/vision capabilities, and pricing. Guided owner/admin key verification, encrypted runner delivery, local server discovery and explicit bounded model connection checks are available in Models & agents. See [connection setup](docs/agent.md#guided-model-connections).
 - Local model inventories reported by an outbound connector; the website never contacts users’ localhost servers.
 - A default model or separate model for each of five QA roles, with per-run budget and call limits.
 - Revision- and artifact-specific QA reports, transparent required-check scores, and unverified AI findings.

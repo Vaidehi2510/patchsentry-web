@@ -120,7 +120,7 @@ npm run dashboard`}</code>
                 </span>
                 <h3>OpenRouter</h3>
                 <p>
-                  Set <code>OPENROUTER_API_KEY</code> in the engine environment.
+                  In Models &amp; agents, verify your key and deliver it encrypted to your trusted runner, or set <code>OPENROUTER_API_KEY</code> in the engine environment.
                   Browse models, select a default or per-role model, and choose
                   a spending limit.
                 </p>
@@ -136,8 +136,8 @@ npm run dashboard`}</code>
                 <h3>A local model server</h3>
                 <p>
                   Select <strong>Local model server</strong> in the engine
-                  dashboard. Enter a compatible loopback <code>/v1</code>{" "}
-                  address and add explicit capability profiles.
+                  workspace. Enroll your runner for model setup, discover served model IDs at a compatible loopback <code>/v1</code>{" "}
+                  address, and save explicit capability profiles.
                 </p>
                 <p>
                   Local mode needs no OpenRouter key and has no cloud fallback.

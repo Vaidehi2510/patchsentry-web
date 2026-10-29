@@ -1,4 +1,5 @@
 import {securityState, securityEndpoint, credentialExists, passwordSignIn, authCall, securitySignOut, resetWithMfa, setupRequestLimit, SecurityError} from './session-security';
+import {modelConnections,requestModelSetup,claimModelSetup,completeModelSetup} from './model-connection';
 import { roleRank, SlackSettingsSchema, slackDefaults, type AccessRole } from '../team';
 import { audit, members, invite, acceptInvite, removeMember, queueNotification, claimNotification, finishNotification } from './team';
 import { releaseGate } from "../release-gate";
@@ -313,6 +314,9 @@ async function dispatch(
   }
   if (path.startsWith("/api/agent/")) {
     const project = await agentProject(request, runtime);
+    if(path==='/api/agent/model-setup/claim'&&request.method==='POST')return json(await claimModelSetup(runtime,project.id,await readBody(request)));
+    const modelSetupAck=/^\/api\/agent\/model-setup\/([a-f0-9-]{36})\/complete$/.exec(path);
+    if(modelSetupAck&&request.method==='POST')return json(await completeModelSetup(runtime,project.id,modelSetupAck[1],sanitize(await readBody(request))));
     if (path === "/api/agent/release-gate" && request.method === "GET") {
       const recordId = url.searchParams.get("recordId") || "";
       const revision = url.searchParams.get("revision") || "";
@@ -342,7 +346,7 @@ async function dispatch(
           const n=await c.query<{n:string}>('SELECT count(*) AS n FROM qa_runners WHERE project_id=$1',[project.id]);
           const prior=await c.query('SELECT id FROM qa_runners WHERE project_id=$1 AND id=$2',[project.id,input.runner.id]);
           if(Number(n.rows[0].n)>=50 && !prior.rows.length)throw new ApiError(409,'A project supports up to 50 registered runners.');
-          await c.query('INSERT INTO qa_runners (project_id,id,payload) VALUES ($1,$2,$3::jsonb) ON CONFLICT (project_id,id) DO UPDATE SET payload=EXCLUDED.payload,last_seen=now()',[project.id,input.runner.id,JSON.stringify(input.runner)]);
+          const registered=await c.query('INSERT INTO qa_runners (project_id,id,payload,setup_key) VALUES ($1,$2,$3::jsonb,$4) ON CONFLICT (project_id,id) DO UPDATE SET payload=EXCLUDED.payload,last_seen=now(),setup_key=COALESCE(qa_runners.setup_key,EXCLUDED.setup_key) WHERE EXCLUDED.setup_key IS NULL OR qa_runners.setup_key IS NULL OR qa_runners.setup_key=EXCLUDED.setup_key RETURNING id',[project.id,input.runner.id,JSON.stringify(input.runner),input.runner.modelSetup?.publicKey || null]);if(!registered.rows.length)throw new ApiError(409,'Runner encryption identity changed. Use a new runner name or rotate the project token deliberately.');
         }
         await c.query('UPDATE projects SET local_models=$1::jsonb,agent_last_seen=now(),runner=$3::jsonb WHERE id=$2',[JSON.stringify(input.models),project.id,input.runner?JSON.stringify(input.runner):null]);await c.query('COMMIT');
       }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
@@ -401,6 +405,8 @@ async function dispatch(
   }
   if (request.method !== "GET") requireOrigin(request, runtime.config.origin);
   const user = await userFor(request, runtime);
+  const modelSetup=/^\/api\/projects\/([a-f0-9-]{36})\/model-connections$/.exec(path);
+  if(modelSetup){const project=await accessibleProject(runtime,modelSetup[1],user.id,request.method==='GET'?'viewer':'admin');if(request.method==='GET')return json(await modelConnections(runtime,project.id));if(request.method==='POST')return json(await requestModelSetup(runtime,project.id,await readBody(request)),201);throw new ApiError(405,'Method not allowed.');}
   if (path === "/api/invitations/accept" && request.method === "POST") return json(await acceptInvite(runtime.database,user,await readBody(request)));
   const teamMatch = /^\/api\/projects\/([a-f0-9-]{36})\/(team|activity|fleet|slack)(?:\/([A-Za-z0-9_-]{1,100}))?$/.exec(path);
   if (teamMatch) {

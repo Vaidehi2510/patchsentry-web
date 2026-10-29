@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {prepareModelSetup,processModelSetup,setupEnvironment} from "./model-setup.mjs";
 import { drainTeamUpdates } from "./team-updates.mjs";
 import { assessmentIdentity, sameAssessment } from "./assessment.mjs";
 /** Outbound connector. Explicit enrollment enables the fixed local QA bridge; no GitHub mutation. */
@@ -413,9 +414,10 @@ export class PortalClient {
   }
   async request(method, endpoint, body) {
     if (
-      !["/api/agent/config", "/api/agent/heartbeat", "/api/agent/jobs/claim"].includes(endpoint) &&
+      !["/api/agent/config", "/api/agent/heartbeat", "/api/agent/jobs/claim", "/api/agent/model-setup/claim"].includes(endpoint) &&
       !/^\/api\/agent\/runs\/[a-f0-9]{64}$/.test(endpoint) &&
-      !/^\/api\/agent\/jobs\/[a-f0-9-]{36}\/(lease|complete)$/.test(endpoint)
+      !/^\/api\/agent\/jobs\/[a-f0-9-]{36}\/(lease|complete)$/.test(endpoint) &&
+      !/^\/api\/agent\/model-setup\/[a-f0-9-]{36}\/complete$/.test(endpoint)
     )
       fail("Unsupported portal endpoint.");
     const serialized = body === undefined ? undefined : JSON.stringify(body);
@@ -720,6 +722,7 @@ async function writeConfig(bot, next) {
   try {
     await fs.writeFile(filename, contents, { flag: "wx", mode: 0o600 });
     await fs.rename(filename, bot.configPath);
+    bot.config=next;bot.configRaw=contents;
   } catch {
     fail("Bot config could not be updated.");
   } finally {
@@ -781,7 +784,12 @@ export async function syncOnce({
     }
   }
   const runner = await prepareRunner({ bot, options, env, repository: remote.repository, readJson, trustedPath, sanitizeText });
+  const modelSetup=await prepareModelSetup({bot,runner,options,trustedPath,projectId:remote.projectId});
   await portal.request("POST", "/api/agent/heartbeat", { models: localInventory(bot.config), runner: runner.heartbeat });
+  const modelSetupResult=modelSetup ? await processModelSetup({state:modelSetup,bot,runner,portal,remote,env,trustedPath,writeConfig}) : undefined;
+  const modelEnvironment=await setupEnvironment(modelSetup,env);
+  if(modelSetup){const current=await prepareRunner({bot,options,env:modelEnvironment,repository:remote.repository,readJson,trustedPath,sanitizeText});Object.assign(runner,current);runner.heartbeat.modelSetup={publicKey:modelSetup.publicKey,backends:modelSetup.backends};await portal.request('POST','/api/agent/heartbeat',{models:localInventory(bot.config),runner:runner.heartbeat});}
+
   const { records, skipped } = serializeState(bot.state, remote.repository);
   let uploaded = 0,
     unchanged = 0;
@@ -797,7 +805,7 @@ export async function syncOnce({
     uploaded++;
   }
   const updatesBefore = options.slackUpdates ? await drainTeamUpdates({bot,portal,env,enabled:true,trustedPath}) : undefined;
-  const job = options.executeJobs ? await runClaimedJob({ runner, bot, portal, models: localInventory(bot.config), env, readJson, trustedPath, sanitizeText, signal: options.signal, githubContext: options.githubContext, onStarted:options.slackUpdates ? ()=>drainTeamUpdates({bot,portal,env,enabled:true,trustedPath}) : undefined }) : undefined;
+  const job = options.executeJobs ? await runClaimedJob({ runner, bot, portal, models: localInventory(bot.config), env:modelEnvironment, readJson, trustedPath, sanitizeText, signal: options.signal, githubContext: options.githubContext, onStarted:options.slackUpdates ? ()=>drainTeamUpdates({bot,portal,env,enabled:true,trustedPath}) : undefined }) : undefined;
   const updates = options.slackUpdates ? await drainTeamUpdates({bot,portal,env,enabled:true,trustedPath}) : undefined;
   return {
     dryRun: false,
@@ -808,6 +816,7 @@ export async function syncOnce({
     settingsApplied,
     localModels: localInventory(bot.config).length,
     ...(job ? { job } : {}),
+    ...(modelSetupResult ? {modelSetup:{...modelSetupResult,fingerprint:modelSetup.fingerprint}} : {}),
     ...(updates ? {updates:{status:updates.status,sent:updates.sent+(updatesBefore?.sent || 0)}} : {}),
   };
 }
@@ -823,6 +832,7 @@ export function parseArgs(args) {
     "--dry-run": "dryRun",
     "--execute-jobs": "executeJobs",
     "--check-runner": "checkRunner",
+    "--allow-model-setup": "allowModelSetup",
     "--slack-updates": "slackUpdates",
     "--github-context": "githubContext",
     "--help": "help",
@@ -872,7 +882,7 @@ export async function main(args = process.argv.slice(2)) {
   const options = parseArgs(args);
   if (options.help) {
     console.log(
-      "Usage: node scripts/agent.mjs --bot-dir /path/to/qa-signoff-bot [--state .qa-local/state.json] [--config qa-config.json] [--watch] [--interval 30] [--apply-model-settings] [--allow-backends openrouter,local] [--allow-images] [--allow-http-loopback] [--execute-jobs --runner-policy portal-policy.json] [--check-runner] [--dry-run]\nSet QA_PORTAL_URL and QA_PORTAL_TOKEN in the environment. Default sync never writes local files; execution requires explicit local enrollment.",
+      "Usage: node scripts/agent.mjs --bot-dir /path/to/qa-signoff-bot [--state .qa-local/state.json] [--config qa-config.json] [--watch] [--interval 30] [--apply-model-settings] [--allow-model-setup] [--allow-backends openrouter,local] [--allow-images] [--allow-http-loopback] [--execute-jobs --runner-policy portal-policy.json] [--check-runner] [--dry-run]\nSet QA_PORTAL_URL and QA_PORTAL_TOKEN in the environment. Default sync never writes local files; execution requires explicit local enrollment.",
     );
     return;
   }

@@ -2518,3 +2518,17 @@ html[data-motion=on] .auth-story:before { animation: ambient-drift 14s ease-in-o
 .auth-card .testing-checkbox { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; font-weight: 400; line-height: 1.6; }
 .auth-card .testing-checkbox input { width: 18px; height: 18px; margin: 3px 0 0; flex-shrink: 0; }
 .auth-card .testing-checkbox input, .auth-card .factor-choices input[type=radio] { min-height: 18px; min-width: 18px; padding: 0; }
+
+.connection-setup { padding: 28px; margin: 22px 0; min-width: 0; }
+.connection-setup h2 { display: flex; align-items: center; gap: 10px; }
+.connection-steps { padding-left: 24px; margin: 20px 0; }
+.connection-steps > li { margin-bottom: 28px; padding-left: 7px; }
+.connection-steps > li > strong { font-size: 17px; }
+.connection-setup p { line-height: 1.75; overflow-wrap: anywhere; }
+.connection-setup label:not(.testing-checkbox) { display: grid; gap: 8px; margin-block: 16px; font-size: 15px; font-weight: 600; }
+.connection-setup input:not([type=checkbox]), .connection-setup select { width: 100%; min-width: 0; padding: 12px; font: inherit; color: #292c27; background: white; border: 1px solid #dcdfd8; border-radius: 9px; }
+.connection-setup pre { padding: 16px; border-radius: 10px; white-space: pre-wrap; overflow-wrap: anywhere; background: #f4f3f8; font-size: 14px; line-height: 1.7; }
+.connection-fingerprint { display: block; overflow-wrap: anywhere; font-size: 13px; padding-block: 8px; }
+.connection-setup .testing-checkbox { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.7; margin: 14px 0; }
+.connection-setup input[type=checkbox] { width: 18px; height: 18px; min-height: 18px; flex-shrink: 0; margin-top: 3px; }
+@media(max-width:600px) { .connection-setup { padding: 18px; } .connection-setup .panel-heading { flex-wrap: wrap; } .connection-setup .button { white-space: normal; max-width: 100%; } }

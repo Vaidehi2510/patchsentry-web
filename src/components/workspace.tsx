@@ -1248,7 +1248,7 @@ function Integration({
               </pre>
               <p className="fineprint">
                 Keep <code>OPENROUTER_API_KEY</code> or your local model
-                credentials on the runner. The website never needs those keys.
+                credentials in the runner environment, or use Models &amp; agents for verified, encrypted delivery to your enrolled runner.
                 Uploaded summaries can contain product information.
               </p>
               <a

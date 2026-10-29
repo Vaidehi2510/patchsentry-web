@@ -2,7 +2,7 @@
 
 The outbound connector links a **separate trusted `qa-signoff-bot` checkout** to one PatchSentry project. It uploads report summaries, advertises explicitly configured local models, and can apply your website's model selections. Default mode only synchronizes reports. Explicitly enrolled execution mode also claims website jobs and launches the reviewed QA engine on your runner. It never changes product files, commits, pushes, merges, starts model servers, or calls GitHub.
 
-Use Node.js 22.17 or newer. The connector has no additional runtime dependencies. Run it from this website repository, or copy both `scripts/agent.mjs` and `scripts/runner.mjs` to your trusted agent machine. The bot must include `src/ai/settings.js` and support OpenRouter/local settings.
+Use Node.js 22.17 or newer. The connector has no additional runtime dependencies. Run it from this website repository, or copy `scripts/agent.mjs`, `scripts/runner.mjs`, `scripts/model-setup.mjs` and `scripts/team-updates.mjs` to your trusted agent machine. The bot must include `src/ai/settings.js` and support OpenRouter/local settings.
 
 ## Enroll the agent
 
@@ -40,7 +40,7 @@ Default sync writes **no local files**. A stable record ID identifies each QA at
 Execution is an explicit local enrollment, separate from report sync. The website does not provision a VM, browser farm, model server, physical phone, or product preview. Configure these on a trusted machine first:
 
 1. Keep the QA bot and product in separate checkouts. The product checkout needs the requested full commit and locally trusted base reference already available. Fetch commits through your trusted setup; a website job cannot choose a remote or run `git fetch`.
-2. Configure the bot's `qa-config.json` with an enabled AI backend, compatible selected model, source exclusions, and budgets. Keep provider keys in the runner environment. Start your local model server if selected.
+2. Configure the bot's `qa-config.json` with an enabled AI backend, compatible selected model, source exclusions, and budgets. Keep provider keys in the runner environment, or use the explicitly enrolled encrypted setup below. Start your local model server if selected.
 3. Install each browser engine you will enroll, or point `QA_CHROMIUM_EXECUTABLE`, `QA_FIREFOX_EXECUTABLE`, and `QA_WEBKIT_EXECUTABLE` at installed executables. Browser binaries are not downloaded by a website job. For isolated baseline suites, locally configure the bot's reviewed runners, Docker, and prebuilt images.
 4. Deploy a disposable product preview exposing exact commit identity as required by the QA engine. Set a testing profile in the website with its URL, initial pages, browser matrix, and explicit user goals/expected text or URL. Supply synthetic inputs only. A code review or healthy HTTP response cannot establish the preview revision.
 5. Create `portal-policy.json` **inside the bot checkout**. This example disables preview mutations, visual comparison, semantic maintenance, and baseline execution until locally enrolled:
@@ -100,7 +100,7 @@ node scripts/agent.mjs --bot-dir /path/to/qa-signoff-bot \
   --watch --apply-model-settings
 ```
 
-This imports the **trusted bot's own** `validateAIConfig` function, validates the selection, and atomically updates only the chosen bot JSON configuration. Run it only with a bot checkout you trust. It preserves bot activation, local server address and profiles, provider privacy settings, source filters, output/context limits, required review, test runners, execution images, and repository settings. The website cannot provide executable commands, source paths, endpoint addresses, or keys.
+This imports the **trusted bot's own** `validateAIConfig` function, validates the selection, and atomically updates only the chosen bot JSON configuration. Run it only with a bot checkout you trust. It preserves bot activation, local server address and profiles, provider privacy settings, source filters, output/context limits, required review, test runners, execution images, and repository settings. The model-selection channel cannot provide executable commands, source paths, endpoint addresses, or keys. The separately enrolled connection-setup channel below accepts a loopback endpoint and an encrypted provider key.
 
 The current inference backend is the only enrolled backend by default. To let the website switch between local inference and OpenRouter, explicitly enroll both:
 
@@ -115,7 +115,7 @@ The applied `maxCostUsd` and `maxCallsPerRun` are each the smaller of the websit
 
 The connector does **not** enable a disabled bot or AI layer. Enable and configure the bot locally after selecting a compatible model. Model changes affect subsequent bot runs, not already running jobs. For a one-shot workflow, run the connector with `--apply-model-settings` before invoking the existing QA job, then run the connector again after the job saves its state.
 
-OpenRouter needs `OPENROUTER_API_KEY` in the QA bot process environment. A local server may use `LOCAL_MODEL_API_KEY`. Neither key is collected by the portal or sent by this connector. `QA_PORTAL_TOKEN` grants access only to the enrolled project's connector endpoints; it is not an inference key.
+OpenRouter needs `OPENROUTER_API_KEY` in the QA bot process environment. A local server may use `LOCAL_MODEL_API_KEY`. Environment credentials are never uploaded by the connector. The optional setup flow below transiently accepts a key in the authenticated portal and delivers only a runner-encrypted envelope. `QA_PORTAL_TOKEN` grants access only to the enrolled project's connector endpoints; it is not an inference key.
 
 Local model choices come from the bot's explicit `ai.local.models` profiles, for example:
 
@@ -167,3 +167,21 @@ Authored Node tests require `allowWorkspaceTests: true`. Enabled test sources an
 Use Team & operations to invite verified users into admin, QA engineer or viewer roles and opt a product into Slack notifications. Slack credentials are runner-only: enroll `teamUpdates.enabled` and `teamUpdates.channelId` locally, set `SLACK_BOT_TOKEN`, and add `--slack-updates`. Optional `--github-context` uses a read-only `GITHUB_TOKEN` to resolve people only when the GitHub source identity matches the tested commit. Notifications run in the connector, outside QA subprocesses. Claims, sent acknowledgements, uncertain delivery and thread identities persist in the portal. No notification is sent until both website and local enrollment agree.
 
 Use distinct `--runner-name` values and per-worker policies with separate `regressionDir` stores. The registry distinguishes hosts, paths, policies and names. Admins explicitly choose up to eight concurrent assessments; each registered worker holds at most one job, and compatibility/freshness/capacity are checked atomically when claiming. A worker must still execute only its locally reviewed policy. The [engine team guide](https://github.com/Vaidehi2510/QA-testbot/blob/main/docs/team-operations.md) covers device pool coordination, explicit baseline parallelism, browser recording and infrastructure limits.
+
+
+## Guided model connections
+
+Open **Models & agents** and choose **OpenRouter** or **Local model server**. Browsing the public catalog needs no key and does not establish a connection. Only an owner or admin can request setup; QA engineers and viewers can read results.
+
+1. Keep the bot and product checkouts separate. Start the website connector with your project token and `--allow-model-setup --allow-backends openrouter,local`. Leave off `--apply-model-settings` until the initial connection and model selection are configured. Setup never enables AI or QA execution.
+2. Compare the selected runner's public fingerprint with the connector's `modelSetup.fingerprint` output. Confirm that you recognize the machine.
+3. For OpenRouter, enter your key in the website's password field and choose **Verify key and connect runner**. The server calls only OpenRouter's fixed HTTPS `/api/v1/key` endpoint to check authentication; this makes no inference call. It then encrypts the key to the runner's RSA-3072 public key using OAEP/SHA-256 and a project/runner/request/provider binding. No plaintext key is persisted or returned. Deployment request-body logging must remain disabled for this endpoint.
+4. For local models, start Ollama, LM Studio, or a compatible server on the runner. Select the loopback `/v1` address, optionally enter its key, and discover actual served model IDs. Declare the actual context window and tool/image capabilities, then save the profile. Discovery does not establish those capabilities. Local network calls happen on the runner; the public website does not connect to localhost.
+5. Choose an exact model ID and request a connection check. OpenRouter requires explicit credit-cost consent. The check sends one fixed synthetic prompt with at most 32 output tokens, no product source, no automatic retry and no cloud fallback. Some reasoning models need a larger output budget and may fail this intentionally small check. This is separate from authenticated-key validation and from a real QA assessment.
+6. Save default and specialist assignments below the setup panel, then restart the same connector with `--apply-model-settings`. AI activation, source filters, effective budgets and execution enrollment remain locally controlled.
+
+The runner writes its private key and encrypted credentials to `.qa-local/model-setup/<runner>/<project-hash>/` inside the trusted bot checkout, outside product source. Files are owner-readable/writable only. Credentials are decrypted into the connector's effective environment for the reviewed inference subprocess; portal/auth/database credentials stay excluded from that subprocess. Anyone controlling the runner account can decrypt its credentials. Do not commit or publish `.qa-local`.
+
+Runner encryption identity is pinned for its registered ID. If its private key is lost, deliberately rotate the project token and re-enroll, or use a new runner name, then reconnect the provider. **Remove saved runner key** deletes only that runner's encrypted provider credential; it does not revoke the provider key or remove separately configured environment variables. Revoke compromised keys at the provider too.
+
+Requests expire after ten minutes queued or two minutes claimed and become **uncertain**, with no silent inference retry. A project allows 30 setup attempts per hour and one active request. The portal clears the encrypted handoff after acknowledgement or expiry. A passed inference badge applies only to the exact runner/backend/model, expires after 15 minutes, and is invalidated by a newer configuration/removal request. Offline workers are not shown as verified. This does not certify tool/image support, role quality, preview readiness or test coverage.

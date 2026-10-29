@@ -21,6 +21,7 @@ import {
   type Settings,
   type CatalogModel,
 } from "@/lib/contracts";
+import {ModelConnectionSetup} from "./model-connection-setup";
 import { api } from "./workspace";
 
 export function ModelSettings({
@@ -158,6 +159,7 @@ export function ModelSettings({
           </span>
         </button>
       </div>
+      <ModelConnectionSetup project={project} backend={settings.backend} selectedModel={settings.model} demo={demo} onInventory={onSave}/>
       <div className="notice model-notice">
         <ShieldCheck size={19} />
         <div>
@@ -168,8 +170,8 @@ export function ModelSettings({
           </strong>
           <p>
             {settings.backend === "openrouter"
-              ? "Set OPENROUTER_API_KEY in your QA runner’s environment. This website saves model choices, never your provider key. Provider charges and runner costs are separate."
-              : "The runner contacts your local model server. This website cannot reach your localhost. Declare model capabilities on the runner; they appear here after it checks in. Reports still upload to this workspace."}
+              ? "Use guided setup, or set OPENROUTER_API_KEY directly on your runner. The guided setup above can verify and securely deliver your key to an enrolled runner. Provider charges and runner costs are separate."
+              : "The runner contacts your local model server. This website cannot reach your localhost. Use guided discovery above to configure the endpoint and actual model profiles; they appear below after the runner checks in. Reports still upload to this workspace."}
           </p>
         </div>
       </div>
