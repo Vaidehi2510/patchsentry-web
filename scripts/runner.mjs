@@ -1,3 +1,5 @@
+import { hostname } from "node:os";
+import { githubPeople } from "./team-updates.mjs";
 import { assessmentIdentity, sameAssessment } from "./assessment.mjs";
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -8,13 +10,13 @@ import { spawn } from 'node:child_process';
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const MAX = 256 * 1024;
-const environmentKeys = ['PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'OPENROUTER_API_KEY', 'LOCAL_MODEL_API_KEY', 'PLAYWRIGHT_BROWSERS_PATH', 'QA_BROWSER_EXECUTABLE', 'QA_CHROMIUM_EXECUTABLE', 'QA_FIREFOX_EXECUTABLE', 'QA_WEBKIT_EXECUTABLE', 'QA_NATIVE_ENABLED', 'QA_NATIVE_DEVICE_ID'];
+const environmentKeys = ['PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'OPENROUTER_API_KEY', 'LOCAL_MODEL_API_KEY', 'PLAYWRIGHT_BROWSERS_PATH', 'QA_BROWSER_EXECUTABLE', 'QA_CHROMIUM_EXECUTABLE', 'QA_FIREFOX_EXECUTABLE', 'QA_WEBKIT_EXECUTABLE', 'QA_NATIVE_ENABLED', 'QA_NATIVE_DEVICE_ID', 'QA_NATIVE_DEVICE_IDS'];
 export function executionEnvironment(env) { return Object.fromEntries(environmentKeys.filter(key => typeof env[key] === 'string').map(key => [key, env[key]])); }
 
 /** Readiness never contacts a model, preview, or GitHub service. */
 export async function prepareRunner({ bot, options, env, repository, readJson, trustedPath, sanitizeText }) {
   const policyFile = options.runnerPolicy || 'portal-policy.json';
-  const heartbeat = { id: sha(`${bot.botDir}\n${policyFile}`), executeJobs: Boolean(options.executeJobs), ready: false,
+  const heartbeat = { id: sha(`${hostname()}\n${options.runnerName || "default"}\n${bot.botDir}\n${policyFile}`), executeJobs: Boolean(options.executeJobs), ready: false,
     missing: [], browsers: [], backends: [], maxPages: 0, maxCostUsd: 0, maxCallsPerRun: 0 };
   if (!options.executeJobs && !options.checkRunner) {
     heartbeat.missing.push('Execution is not enrolled. Start the connector with --execute-jobs --runner-policy portal-policy.json.');
@@ -86,7 +88,7 @@ export function sanitizeJobReport(raw, job, clean) {
   return report;
 }
 
-export async function runClaimedJob({ runner, bot, portal, models, env, readJson, trustedPath, sanitizeText, signal, execute = executeBridge, renewMs = 30000 }) {
+export async function runClaimedJob({ runner, bot, portal, models, env, readJson, trustedPath, sanitizeText, signal, execute = executeBridge, renewMs = 30000, githubContext = false, onStarted = undefined }) {
   if (!runner.heartbeat.ready) return { status: 'not-ready' };
   const claim = await portal.request('POST', '/api/agent/jobs/claim', { runnerId: runner.heartbeat.id });
   if (!claim?.job) return { status: 'idle' };
@@ -106,6 +108,7 @@ export async function runClaimedJob({ runner, bot, portal, models, env, readJson
   };
   const timer = setInterval(() => { if (!renewal) renewal = renew().finally(() => { renewal = undefined; }); }, renewMs);
   try {
+    if (onStarted) await onStarted().catch(() => {});
     const jobDir = await trustedPath(bot.botDir, `.qa-local/portal-jobs/${job.id}`, { missing: true });
     await fs.mkdir(jobDir, { recursive: true, mode: 0o700 });
     const jobFile = await trustedPath(bot.botDir, path.join(jobDir, 'job.json'), { missing: true });
@@ -123,6 +126,7 @@ export async function runClaimedJob({ runner, bot, portal, models, env, readJson
     const stat = await fs.lstat(reportFile);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new Error('Unsafe runner report file.');
     const report = sanitizeJobReport((await readJson(reportFile, MAX)).value, job, sanitizeText);
+    report.people = await githubPeople(job,{token:githubContext ? env.GITHUB_TOKEN : undefined});
     await portal.request('PUT', `/api/agent/runs/${report.recordId}`, report);
     await ack('completed', 'The reviewed runner finished. Check outcomes determine the QA result.', report.recordId);
     return { status: 'completed', id: job.id, recordId: report.recordId, resumedReport: exists };

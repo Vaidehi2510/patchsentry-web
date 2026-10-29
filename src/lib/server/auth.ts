@@ -137,4 +137,13 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
     CHECK(status IN ('queued','running','completed','blocked','failed','cancelled'))
   )`);
   await database.query("CREATE INDEX IF NOT EXISTS qa_jobs_project_queue_idx ON qa_jobs(project_id, status, created_at)");
+  await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS slack_settings jsonb");
+  await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS max_parallel integer NOT NULL DEFAULT 1 CHECK(max_parallel BETWEEN 1 AND 8)");
+  await database.query(`CREATE TABLE IF NOT EXISTS qa_members (project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,user_id text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,role text NOT NULL CHECK(role IN ('admin','qa','viewer')),PRIMARY KEY(project_id,user_id))`);
+  await database.query(`CREATE TABLE IF NOT EXISTS qa_invites (token_hash text PRIMARY KEY,project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,email text NOT NULL,role text NOT NULL CHECK(role IN ('admin','qa','viewer')),expires_at timestamptz NOT NULL,UNIQUE(project_id,email))`);
+  await database.query(`CREATE TABLE IF NOT EXISTS qa_activity (id text PRIMARY KEY,project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,actor text NOT NULL,action text NOT NULL,detail text NOT NULL,created_at timestamptz NOT NULL DEFAULT now())`);
+  await database.query(`CREATE TABLE IF NOT EXISTS qa_runners (project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,id text NOT NULL,payload jsonb NOT NULL,last_seen timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(project_id,id))`);
+  await database.query(`CREATE TABLE IF NOT EXISTS qa_notifications (id text PRIMARY KEY,project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,event_key text NOT NULL,payload jsonb NOT NULL,status text NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sending','sent','uncertain')),claim_hash text,claimed_at timestamptz,slack_ts text,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(project_id,event_key))`);
+  await database.query('CREATE INDEX IF NOT EXISTS qa_notifications_project_idx ON qa_notifications(project_id,status,created_at)');
+  await database.query('CREATE TABLE IF NOT EXISTS qa_slack_threads (project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,channel_id text NOT NULL,job_id text NOT NULL,ts text NOT NULL,PRIMARY KEY(project_id,channel_id,job_id))');
 }

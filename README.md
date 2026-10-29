@@ -85,7 +85,7 @@ If mail delivery is unconfigured, signup and login show a clear setup notice and
 
 ### Readability and motion
 
-The sage and lavender interface supports independent builders and team-owned products. Inputs use at least 16px text, common controls have larger tap targets, and responsive layouts preserve readable text on mobile. Scroll reveals, workflow signals, and preview animations have a persistent pause control and honor `prefers-reduced-motion`. Content remains visible without animation support. Team products are managed by the project account owner; shared membership and invitations are not implemented.
+The sage and lavender interface supports independent builders and team-owned products. Inputs use at least 16px text, common controls have larger tap targets, and responsive layouts preserve readable text on mobile. Scroll reveals, workflow signals, and preview animations have a persistent pause control and honor `prefers-reduced-motion`. Content remains visible without animation support. Product owners can invite verified teammates as admins, QA engineers or viewers. Optional per-product Slack updates, capability-aware runner fleets and activity history live in Team & operations.
 
 Never deploy with `PGLITE_DATA_DIR`. Vercel serverless disk is not a persistent database. Keep preview deployments separate from production data and configure their own exact auth origin when enabling accounts there.
 
@@ -106,7 +106,7 @@ Tests use real Better Auth sessions and PostgreSQL-compatible storage. They cove
 ## Boundaries of this release
 
 - No unattended QA service is provisioned by signing up. A trusted runner and the QA engine must be configured for each product.
-- Email links establish inbox ownership, not repository ownership. Billing, team invitations, and GitHub OAuth installation are not enabled in this beta. Password recovery is unnecessary for passwordless accounts.
+- Email links establish inbox ownership, not repository ownership. Billing, SAML/SCIM and GitHub OAuth installation are not enabled in this beta. Password recovery is unnecessary for passwordless accounts.
 - Registering a repository grants no GitHub access. A project token reads its project’s settings, claims locally enrolled jobs and submits reports; it cannot read another account’s data.
 - Report scores are `floor(passed required checks / all required checks × 100)`. No required checks means no score. Failed, blocked, skipped, unsupported, and pending checks cannot count as passed. High-severity AI findings require review even when checks pass.
 - AI findings are unverified suggestions. A score is neither test coverage nor a guarantee that a product is bug-free.
@@ -116,7 +116,7 @@ Tests use real Better Auth sessions and PostgreSQL-compatible storage. They cove
 
 ## Architecture
 
-Next.js / React → Better Auth → PostgreSQL. Account APIs enforce owner-scoped queries. Separate project tokens are hashed in the database. The runner connects outbound over HTTPS; model inference and test execution stay in the QA engine’s environment. The web server never executes product PR code.
+Next.js / React → Better Auth → PostgreSQL. Account APIs enforce product membership and role permissions. Separate project tokens are hashed in the database. The runner connects outbound over HTTPS; model inference and test execution stay in the QA engine’s environment. The web server never executes product PR code.
 
 The source is MIT licensed. Provider models, hosting, and runner infrastructure have their own terms and costs.
 
@@ -126,6 +126,10 @@ Choose a pull request, CI build or complete release from Overview. Builds/releas
 
 The website stores and displays evidence; the engine CLI gate can rehash the private local artifact before deployment. Project-token callers can also query `/api/agent/release-gate` with `recordId`, `revision`, `kind`, `name`, `platform` and `artifactSha256`. That lookup verifies report identity, required gates, findings and one-hour freshness; it cannot inspect the private artifact. CI must invoke the gate before its own deployment command. No product deployment or source edit happens through the portal.
 
-The test library supports Node execution only after local `allowWorkspaceTests: true` enrollment; other framework drafts export to your own CI and JUnit import path. New jobs snapshot enabled test source/digests. Account ownership protects test source, and editing/deleting a saved case cannot alter already queued jobs. At most eight enabled Node tests totaling 96 KB can be included. The source is never executed by the website.
+The test library supports Node execution only after local `allowWorkspaceTests: true` enrollment; other framework drafts export to your own CI and JUnit import path. New jobs snapshot enabled test source/digests. Product membership and role permissions protect test source, and editing/deleting a saved case cannot alter already queued jobs. At most eight enabled Node tests totaling 96 KB can be included. The source is never executed by the website.
 
 See [platform coverage](https://patchsentry.vercel.app/coverage) and the [sourced comparison](https://github.com/Vaidehi2510/QA-testbot/blob/main/docs/comparison.md) for scope and remaining gaps.
+
+## Team operations
+
+Owners, admins, QA engineers and viewers have distinct API-enforced roles. Invitations are verified-email-bound, single-use and expire in seven days; share their one-time code privately. Each product can opt into Slack lifecycle updates without storing bot tokens on the website. A connector needs both local `teamUpdates` enrollment and `--slack-updates`; add `--github-context` and a read-only GitHub token for pinned author/releaser metadata. Worker fleets default to one job per product and support explicitly selected concurrency up to eight across compatible workers. See the [full setup and limits](https://github.com/Vaidehi2510/QA-testbot/blob/main/docs/team-operations.md).

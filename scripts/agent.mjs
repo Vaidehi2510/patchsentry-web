@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { drainTeamUpdates } from "./team-updates.mjs";
 import { assessmentIdentity, sameAssessment } from "./assessment.mjs";
 /** Outbound connector. Explicit enrollment enables the fixed local QA bridge; no GitHub mutation. */
 import fs from "node:fs/promises";
@@ -795,7 +796,9 @@ export async function syncOnce({
     receipts.set(key, digest);
     uploaded++;
   }
-  const job = options.executeJobs ? await runClaimedJob({ runner, bot, portal, models: localInventory(bot.config), env, readJson, trustedPath, sanitizeText, signal: options.signal }) : undefined;
+  const updatesBefore = options.slackUpdates ? await drainTeamUpdates({bot,portal,env,enabled:true,trustedPath}) : undefined;
+  const job = options.executeJobs ? await runClaimedJob({ runner, bot, portal, models: localInventory(bot.config), env, readJson, trustedPath, sanitizeText, signal: options.signal, githubContext: options.githubContext, onStarted:options.slackUpdates ? ()=>drainTeamUpdates({bot,portal,env,enabled:true,trustedPath}) : undefined }) : undefined;
+  const updates = options.slackUpdates ? await drainTeamUpdates({bot,portal,env,enabled:true,trustedPath}) : undefined;
   return {
     dryRun: false,
     runs: records.length,
@@ -805,6 +808,7 @@ export async function syncOnce({
     settingsApplied,
     localModels: localInventory(bot.config).length,
     ...(job ? { job } : {}),
+    ...(updates ? {updates:{status:updates.status,sent:updates.sent+(updatesBefore?.sent || 0)}} : {}),
   };
 }
 
@@ -819,6 +823,8 @@ export function parseArgs(args) {
     "--dry-run": "dryRun",
     "--execute-jobs": "executeJobs",
     "--check-runner": "checkRunner",
+    "--slack-updates": "slackUpdates",
+    "--github-context": "githubContext",
     "--help": "help",
   };
   const values = {
@@ -828,6 +834,7 @@ export function parseArgs(args) {
     "--interval": "interval",
     "--allow-backends": "allowedBackends",
     "--runner-policy": "runnerPolicy",
+    "--runner-name": "runnerName",
   };
   for (let i = 0; i < args.length; i++) {
     if (flags[args[i]]) options[flags[args[i]]] = true;
@@ -845,6 +852,7 @@ export function parseArgs(args) {
     )
       fail("--allow-backends accepts openrouter,local.");
   }
+  if(options.runnerName!==undefined && !/^[A-Za-z0-9_-]{1,50}$/.test(options.runnerName))fail("Use a short runner name containing letters, digits, underscores or hyphens.");
   options.interval =
     options.interval === undefined ? 30 : Number(options.interval);
   if (

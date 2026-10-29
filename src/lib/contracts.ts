@@ -1,5 +1,6 @@
 import { AssessmentTargetSchema } from "./targets";
 import { z } from "zod";
+import { PeopleSchema, type AccessRole } from './team';
 import type { Runner, TestingProfile } from "./jobs";
 
 export const roles = [
@@ -104,6 +105,7 @@ export const RunInputSchema = z
       })
       .strict().optional(),
     target: AssessmentTargetSchema.optional(),
+    people: PeopleSchema.optional(),
     revision: z.string().regex(/^[a-fA-F0-9]{40,64}$/),
     createdAt: z.iso.datetime(),
     completedAt: z.iso.datetime().nullable().optional(),
@@ -182,6 +184,8 @@ export function computeScore(
   };
 }
 export type Project = {
+  accessRole?: AccessRole;
+  maxParallel?: number;
   id: string;
   name: string;
   repository: string;

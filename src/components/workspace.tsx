@@ -1,6 +1,8 @@
 "use client";
 import { subjectLabel, subjectTitle, platformLabels } from "@/lib/targets";
 import { releaseGate } from "@/lib/release-gate";
+import { TeamOperations, JoinProject } from "./team-operations";
+import { roleRank } from "@/lib/team";
 import { TestLibrary } from "./test-library";
 import Link from "next/link";
 import { BrandMark } from "./marketing/site-shell";
@@ -43,7 +45,7 @@ import "./workspace.css";
 import { MotionToggle } from "./motion";
 import { runnerOnline } from "@/lib/jobs";
 
-type Tab = "overview" | "runs" | "models" | "testing" | "integration" | "tests";
+type Tab = "overview" | "runs" | "models" | "testing" | "integration" | "tests" | "team";
 type User = { id: string; name: string; email: string };
 const nav = [
   { id: "overview" as Tab, label: "Overview", icon: LayoutDashboard },
@@ -51,6 +53,7 @@ const nav = [
   { id: "tests" as Tab, label: "Test library", icon: Code2 },
   { id: "models" as Tab, label: "Models & agents", icon: SlidersHorizontal },
   { id: "testing" as Tab, label: "Testing setup", icon: FileCode2 },
+  { id: "team" as Tab, label: "Team & operations", icon: ShieldCheck },
   { id: "integration" as Tab, label: "Integrations", icon: Plug },
 ];
 const statusLabels: Record<RunStatus, string> = {
@@ -204,7 +207,8 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     try {
       const p = await api("/api/projects");
       setProjects(p.projects);
-      if (projectId) {
+      if (!projectId || !p.projects.some((item: Project) => item.id === projectId)) setProjectId(p.projects[0]?.id || "");
+      if (projectId && p.projects.some((item: Project) => item.id === projectId)) {
         const d = await api(`/api/projects/${projectId}/runs`);
         if (projectRef.current === refreshId) setRuns(d.runs);
       }
@@ -401,6 +405,8 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             </div>
           ) : (
             <>
+              {!demo && <JoinProject refresh={refresh} />}
+              {project?.accessRole && project.accessRole !== "owner" && <p className="notice">Project access: {project.accessRole}. Your permissions control the actions available below.</p>}
               <div className="app-heading">
                 <div>
                   <span className="eyebrow">
@@ -486,8 +492,9 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                 />
               ) : (
                 <>
+                  {tab === "team" && <TeamOperations key={project.id} project={project} demo={demo} />}
                   {!demo && tab === "overview" && <ProjectSetup project={project} navigate={go} />}
-                  {tab === "testing" && <TestingSetup key={project.id} project={project} demo={demo} onSaved={value => setProjects(items => items.map(p => p.id === value.id ? value : p))} />}
+                  {tab === "testing" && <fieldset className="access-controls" disabled={roleRank[project.accessRole || "owner"] < 2}><TestingSetup key={project.id} project={project} demo={demo} onSaved={value => setProjects(items => items.map(p => p.id === value.id ? value : p))} /></fieldset>}
                   {tab === "overview" && (
                     <>
                       <div className="stat-grid">
@@ -640,9 +647,9 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                       demo={demo}
                     />
                   )}
-                  {tab === "tests" && <TestLibrary key={project.id} project={project} demo={demo} />}
+                  {tab === "tests" && <fieldset className="access-controls" disabled={project.accessRole === "viewer"}><TestLibrary key={project.id} project={project} demo={demo} /></fieldset>}
                   {tab === "models" && (
-                    <ModelSettings
+                    <fieldset className="access-controls" disabled={roleRank[project.accessRole || "owner"] < 2}><ModelSettings
                       key={project.id}
                       project={project}
                       demo={demo}
@@ -651,16 +658,16 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                           v.map((x) => (x.id === p.id ? p : x)),
                         )
                       }
-                    />
+                    /></fieldset>
                   )}
-                  {(tab === "overview" || tab === "runs") && <details className="qa-request-details"><summary><GitPullRequest size={19} /><span>Request a QA assessment<small>{demo ? "Preview PR, build and release requests" : "Test a pull request, build or complete release version"}</small></span><ChevronDown size={18} /></summary><JobQueue key={project.id} project={project} demo={demo} runs={runs} openRun={setSelected} refresh={refresh} /></details>}
+                  {(tab === "overview" || tab === "runs") && <details className="qa-request-details"><summary><GitPullRequest size={19} /><span>Request a QA assessment<small>{demo ? "Preview PR, build and release requests" : "Test a pull request, build or complete release version"}</small></span><ChevronDown size={18} /></summary><fieldset className="access-controls" disabled={project.accessRole === "viewer"}><JobQueue key={project.id} project={project} demo={demo} runs={runs} openRun={setSelected} refresh={refresh} /></fieldset></details>}
                   {tab === "integration" && (
-                    <Integration
+                    <fieldset className="access-controls" disabled={(project.accessRole || "owner") !== "owner"}><Integration
                       key={project.id}
                       project={project}
                       demo={demo}
                       refresh={refresh}
-                    />
+                    /></fieldset>
                   )}
                 </>
               )}
@@ -926,6 +933,7 @@ function RunDetail({
             {run.repository} · <code>{run.revision.slice(0, 12)}</code> ·{" "}
             {new Date(run.createdAt).toLocaleString()}
           </p>
+          {run.people && <p className="fineprint">Requested by {run.people.requestedBy || 'not recorded'}{run.people.author ? ` · PR author ${run.people.author}` : ''}{run.people.mergedBy ? ` · merged by ${run.people.mergedBy}` : ''}{run.people.releasedBy ? ` · released by ${run.people.releasedBy}` : ''}{run.people.builtBy ? ` · built by ${run.people.builtBy}` : ''} · identity source: {run.people.source}</p>}
           {!demo && (
             <a
               href={run.pr ? `https://github.com/${run.repository}/pull/${run.pr.number}` : `https://github.com/${run.repository}/commit/${run.revision}`}

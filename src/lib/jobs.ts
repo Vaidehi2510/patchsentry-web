@@ -57,6 +57,7 @@ export const RunnerSchema = z.object({
 export type Runner = z.infer<typeof RunnerSchema>;
 export const JobRequestSchema = z.object({ prNumber: z.number().int().positive().max(100000000).optional(), target: AssessmentTargetSchema.optional(), revision: z.string().regex(/^[a-fA-F0-9]{40}$/), dedupeKey: z.string().uuid() }).strict().refine(v => Boolean(v.prNumber) !== Boolean(v.target), "Choose one PR, build or release target.");
 export const JobInputSchema = z.object({
+  requestedBy: z.string().max(100).optional(),
   schemaVersion: z.literal(1), id: z.string().uuid(), repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/).max(201),
   pr: z.object({ number: z.number().int().positive() }).strict().optional(), target: AssessmentTargetSchema.optional(), unitTests: z.array(UnitTestSnapshotSchema).max(8).refine(v => v.reduce((n, t) => n + new TextEncoder().encode(t.source).length, 0) <= 96000).optional(), revision: z.string().regex(/^[a-f0-9]{40}$/),
   base: z.string().min(1).max(120), settings: SettingsSchema, testingProfile: TestingProfileSchema,

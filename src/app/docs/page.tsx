@@ -35,6 +35,8 @@ export default function DocsPage() {
           <a href="#review">Review a specific change</a>
           <a href="#browser">Add browser coverage</a>
           <a href="#workspace">Connect a workspace</a>
+          <a href="#teams">Team roles & Slack</a>
+          <a href="#recording">Recording & worker fleets</a>
           <a href="#next">Go further</a>
           <div>
             <BookOpen size={18} />
@@ -291,6 +293,8 @@ node scripts/agent.mjs \\
               Create your workspace <ArrowUpRight size={15} />
             </Link>
           </section>
+          <section id="teams"><span className="eyebrow">YOUR PRODUCT TEAM</span><h2>Give people the right access.</h2><p>Open Team &amp; operations to invite verified teammates. The owner controls tokens and project deletion; admins manage settings and memberships; QA engineers author tests and request runs; viewers read test source and results. Invitations are email-bound, single-use and valid for seven days. Share the one-time code privately.</p><p>Slack is optional for each product. Choose your own channel and events, then enroll the same channel and a bot token on your connector. Updates include the requester, available exact-revision GitHub author/releaser, build or version, QA result and report link. Uncertain delivery is visible and never silently retried.</p><a className="text-button" href={engine+"/blob/main/docs/team-operations.md"} target="_blank" rel="noreferrer">Slack setup, scopes and delivery rules <ArrowUpRight size={16}/></a></section>
+          <section id="recording"><span className="eyebrow">RECORD &amp; SCALE</span><h2>Bring the right environment to each check.</h2><p>Use <code>npm run qa:record</code> on your trusted runner to record explicit actions in a disposable preview without editing product source. Raw fill values are omitted; replay uses reviewed synthetic inputs and trusted assertions. A recording remains a draft until it passes actual replay.</p><p>Register multiple workers with distinct names and separate regression stores. Admins select up to eight simultaneous assessments. The queue routes jobs by enrolled capabilities and budgets. Independent baseline suites can also use explicit bounded parallelism. Native device pools use leases and quarantine on uncertain cleanup; hardware, cloud capacity and device drivers must be provisioned separately.</p><a className="text-button" href={engine+"/blob/main/docs/team-operations.md"} target="_blank" rel="noreferrer">Recording and device-pool setup <ArrowUpRight size={16}/></a></section>
           <section id="next">
             <span className="eyebrow">07 / KEEP GOING</span>
             <h2>Make the workflow your own.</h2>

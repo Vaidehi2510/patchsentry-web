@@ -2483,3 +2483,22 @@ html[data-motion=on] .auth-story:before { animation: ambient-drift 14s ease-in-o
 .workspace .release-summary ul { margin: 18px 0 0; font-size: 14px; line-height: 1.8; color: #665777; }
 @media (max-width: 1000px) { .workspace .test-library-layout { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 480px) { .workspace .test-editor { padding: 18px; } .workspace .test-editor textarea.test-source { font-size: 16px; padding: 14px; } .workspace .assessment-request { padding-inline: 18px; } }
+
+.access-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+.access-controls:disabled button { opacity: .6; cursor: not-allowed; }
+.team-operations { display: grid; gap: 24px; }
+.operations-panel { padding: 28px; min-width: 0; }
+.operations-panel fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 18px; }
+.operations-panel label:not(.testing-checkbox), .join-project label { display: grid; gap: 8px; font-size: 15px; font-weight: 600; }
+.operations-panel input:not([type=checkbox]), .operations-panel select, .join-project input { min-width: 0; width: 100%; border: 1px solid #dcdfd8; border-radius: 9px; padding: 12px; background: white; color: #292c27; font: inherit; }
+.operations-panel form, .operations-panel details { margin: 22px 0; }
+.operations-panel details li, .operations-panel details p { font-size: 15px; line-height: 1.8; margin-bottom: 12px; overflow-wrap: anywhere; }
+.operations-panel details summary { cursor: pointer; font-weight: 600; }
+.operations-events { display: flex; gap: 16px; flex-wrap: wrap; }
+.operations-list > div { display: flex; gap: 16px; align-items: center; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #e7e8e2; font-size: 15px; overflow-wrap: anywhere; }
+.operations-list small { display: block; color: #707669; line-height: 1.7; }
+.operations-list time { color: #707669; font-size: 13px; }
+.invitation-code { display: block; overflow-wrap: anywhere; padding-block: 14px; }
+.join-project { margin-bottom: 20px; }
+.join-project form { margin-top: 14px; padding: 18px; background: #fff; border: 1px solid #e2e5dd; border-radius: 12px; max-width: 560px; }
+@media(max-width:600px) { .operations-panel { padding: 18px; } .operations-list > div { flex-wrap: wrap; } .operations-panel .button { max-width:100%; white-space:normal; } }

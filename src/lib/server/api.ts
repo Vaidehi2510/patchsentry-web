@@ -1,3 +1,5 @@
+import { roleRank, SlackSettingsSchema, slackDefaults, type AccessRole } from '../team';
+import { audit, members, invite, acceptInvite, removeMember, queueNotification, claimNotification, finishNotification } from './team';
 import { releaseGate } from "../release-gate";
 import { AssessmentTargetSchema } from "../targets";
 import { listTestCases, saveTestCase, deleteTestCase } from "./test-cases";
@@ -56,6 +58,9 @@ type ProjectRow = {
   agent_email_verified: boolean;
   testing_profile?: TestingProfile;
   runner?: Runner | null;
+  access_role?: AccessRole;
+  slack_settings?: unknown;
+  max_parallel?: number;
 };
 
 export class ApiError extends Error {
@@ -81,6 +86,8 @@ function iso(value: Date | string) {
 function projectView(row: ProjectRow): Project {
   return {
     id: row.id,
+    accessRole: row.access_role || "owner",
+    maxParallel: row.max_parallel || 1,
     name: row.name,
     repository: row.repository,
     createdAt: iso(row.created_at),
@@ -175,16 +182,18 @@ async function userFor(request: Request, runtime: Runtime) {
   if (!session.user.emailVerified) throw new ApiError(401, "Verify your email with a new sign-in link to continue.");
   return session.user;
 }
-async function ownedProject(
+async function accessibleProject(
   runtime: Runtime,
   id: string,
   ownerId: string,
+  minimum: AccessRole = "viewer",
 ): Promise<ProjectRow> {
   const result = await runtime.database.query<ProjectRow>(
-    "SELECT * FROM projects WHERE id = $1 AND owner_id = $2",
+    `SELECT p.*,CASE WHEN p.owner_id=$2 THEN 'owner' ELSE m.role END AS access_role FROM projects p LEFT JOIN qa_members m ON m.project_id=p.id AND m.user_id=$2 WHERE p.id=$1 AND (p.owner_id=$2 OR m.user_id IS NOT NULL)`,
     [id, ownerId],
   );
   if (!result.rows[0]) throw new ApiError(404, "Project not found.");
+  if (roleRank[result.rows[0].access_role || "owner"] < roleRank[minimum]) throw new ApiError(403, "Your project role does not allow this action.");
   return result.rows[0];
 }
 function hashToken(token: string) {
@@ -345,12 +354,22 @@ async function dispatch(
         Heartbeat,
         sanitize(parse(Heartbeat, await readBody(request))),
       );
-      await runtime.database.query(
-        "UPDATE projects SET local_models = $1::jsonb, agent_last_seen = now(), runner = $3::jsonb WHERE id = $2",
-        [JSON.stringify(input.models), project.id, input.runner ? JSON.stringify(input.runner) : null],
-      );
+      const c=await runtime.database.connect();
+      try { await c.query('BEGIN'); await c.query('SELECT id FROM projects WHERE id=$1 FOR UPDATE',[project.id]);
+        if(input.runner){
+          await c.query("DELETE FROM qa_runners WHERE project_id=$1 AND last_seen<now()-interval '1 day' AND NOT EXISTS (SELECT 1 FROM qa_jobs j WHERE j.project_id=qa_runners.project_id AND j.runner_id=qa_runners.id AND j.status='running')",[project.id]);
+          const n=await c.query<{n:string}>('SELECT count(*) AS n FROM qa_runners WHERE project_id=$1',[project.id]);
+          const prior=await c.query('SELECT id FROM qa_runners WHERE project_id=$1 AND id=$2',[project.id,input.runner.id]);
+          if(Number(n.rows[0].n)>=50 && !prior.rows.length)throw new ApiError(409,'A project supports up to 50 registered runners.');
+          await c.query('INSERT INTO qa_runners (project_id,id,payload) VALUES ($1,$2,$3::jsonb) ON CONFLICT (project_id,id) DO UPDATE SET payload=EXCLUDED.payload,last_seen=now()',[project.id,input.runner.id,JSON.stringify(input.runner)]);
+        }
+        await c.query('UPDATE projects SET local_models=$1::jsonb,agent_last_seen=now(),runner=$3::jsonb WHERE id=$2',[JSON.stringify(input.models),project.id,input.runner?JSON.stringify(input.runner):null]);await c.query('COMMIT');
+      }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
       return json({ ok: true });
     }
+    if(path==='/api/agent/notifications/claim' && request.method==='POST') return json(await claimNotification(runtime.database,project.id,await readBody(request)));
+    const notifyMatch=/^\/api\/agent\/notifications\/([a-f0-9-]{36})\/complete$/.exec(path);
+    if(notifyMatch && request.method==='POST')return json(await finishNotification(runtime.database,project.id,notifyMatch[1],await readBody(request)));
     if (path === "/api/agent/jobs/claim" && request.method === "POST") return json(await claimJob(runtime.database, project, await readBody(request)));
     const leaseMatch = /^\/api\/agent\/jobs\/([a-f0-9-]{36})\/(lease|complete)$/.exec(path);
     if (leaseMatch && request.method === "POST") return json(await updateLease(runtime.database, project.id, leaseMatch[1], sanitize(await readBody(request)), leaseMatch[2] === "complete"));
@@ -381,7 +400,8 @@ async function dispatch(
         `INSERT INTO qa_runs (project_id, record_id, payload) VALUES ($1, $2, $3::jsonb)
         ON CONFLICT (project_id, record_id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
         WHERE qa_runs.payload->>'revision' = EXCLUDED.payload->>'revision'
-          AND qa_runs.payload->'pr'->>'number' = EXCLUDED.payload->'pr'->>'number'
+          AND (qa_runs.payload->'pr'->>'number') IS NOT DISTINCT FROM (EXCLUDED.payload->'pr'->>'number')
+          AND (qa_runs.payload->'target') IS NOT DISTINCT FROM (EXCLUDED.payload->'target')
         RETURNING record_id`,
         [project.id, input.recordId, JSON.stringify(run)],
       );
@@ -400,10 +420,29 @@ async function dispatch(
   }
   if (request.method !== "GET") requireOrigin(request, runtime.config.origin);
   const user = await userFor(request, runtime);
+  if (path === "/api/invitations/accept" && request.method === "POST") return json(await acceptInvite(runtime.database,user,await readBody(request)));
+  const teamMatch = /^\/api\/projects\/([a-f0-9-]{36})\/(team|activity|fleet|slack)(?:\/([A-Za-z0-9_-]{1,100}))?$/.exec(path);
+  if (teamMatch) {
+    const area=teamMatch[2], action=teamMatch[3];
+    const project=await accessibleProject(runtime,teamMatch[1],user.id,request.method==='GET' ? 'viewer' : 'admin');
+    const role=project.access_role || 'owner';
+    if(area==='team' && request.method==='GET') return json({members:await members(runtime.database,project.id),role,pending:(await runtime.database.query("SELECT 'invite-'||token_hash AS id,email,role,expires_at FROM qa_invites WHERE project_id=$1 AND expires_at>now() ORDER BY email",[project.id])).rows});
+    if(area==='team' && !action && request.method==='POST') return json(await invite(runtime.database,project.id,user.name,role,await readBody(request)),201);
+    if(area==='team' && action && request.method==='DELETE') {
+      if(action.startsWith('invite-')){const r=await runtime.database.query("DELETE FROM qa_invites WHERE project_id=$1 AND token_hash=$2 AND ($3=true OR role<>'admin') RETURNING email",[project.id,action.slice(7),role==='owner']);if(!r.rows.length)throw new ApiError(404,'Invitation unavailable or only the owner can revoke an admin invitation.');await audit(runtime.database.query.bind(runtime.database),project.id,user.name,'member.invitation_revoked',String(r.rows[0].email));return json({revoked:true});}
+      return json(await removeMember(runtime.database,project.id,user.name,role,action));
+    }
+    if(area==='activity' && request.method==='GET') return json({activity:(await runtime.database.query('SELECT actor,action,detail,created_at FROM qa_activity WHERE project_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100',[project.id])).rows});
+    if(area==='fleet' && request.method==='GET') return json({maxParallel:project.max_parallel || 1,runners:(await runtime.database.query('SELECT id,payload,last_seen,(SELECT count(*) FROM qa_jobs j WHERE j.project_id=r.project_id AND j.runner_id=r.id AND j.status=\'running\') AS active FROM qa_runners r WHERE project_id=$1 ORDER BY last_seen DESC',[project.id])).rows});
+    if(area==='fleet' && request.method==='PATCH') {const input=parse(z.object({maxParallel:z.number().int().min(1).max(8)}).strict(),await readBody(request));await runtime.database.query('UPDATE projects SET max_parallel=$2 WHERE id=$1',[project.id,input.maxParallel]);await audit(runtime.database.query.bind(runtime.database),project.id,user.name,'fleet.capacity',String(input.maxParallel));return json(input);}
+    if(area==='slack' && request.method==='GET') return json({settings:project.slack_settings || slackDefaults,deliveries:(await runtime.database.query('SELECT id,event_key,status,created_at,slack_ts FROM qa_notifications WHERE project_id=$1 ORDER BY created_at DESC LIMIT 30',[project.id])).rows});
+    if(area==='slack' && request.method==='PATCH') {const input=parse(SlackSettingsSchema,await readBody(request));await runtime.database.query('UPDATE projects SET slack_settings=$2::jsonb WHERE id=$1',[project.id,JSON.stringify(input)]);await audit(runtime.database.query.bind(runtime.database),project.id,user.name,'slack.settings',input.enabled ? input.channelId : 'Disabled');return json({settings:input});}
+    throw new ApiError(405,'Method not allowed.');
+  }
   if (path === "/api/projects") {
     if (request.method === "GET") {
       const result = await runtime.database.query<ProjectRow>(
-        "SELECT * FROM projects WHERE owner_id = $1 ORDER BY created_at DESC",
+        `SELECT p.*,CASE WHEN p.owner_id=$1 THEN 'owner' ELSE m.role END AS access_role FROM projects p LEFT JOIN qa_members m ON m.project_id=p.id AND m.user_id=$1 WHERE p.owner_id=$1 OR m.user_id IS NOT NULL ORDER BY p.created_at DESC`,
         [user.id],
       );
       return json({ projects: result.rows.map(projectView) });
@@ -441,30 +480,31 @@ async function dispatch(
   }
   const jobMatch = /^\/api\/projects\/([a-f0-9-]{36})\/jobs(?:\/([a-f0-9-]{36})\/(retry|cancel))?$/.exec(path);
   if (jobMatch) {
-    const project = await ownedProject(runtime, jobMatch[1], user.id);
+    const project = await accessibleProject(runtime, jobMatch[1], user.id, request.method === "GET" ? "viewer" : "qa");
     if (!jobMatch[2] && request.method === "GET") return json({ jobs: await listJobs(runtime.database, project.id) });
-    if (!jobMatch[2] && request.method === "POST") return json(await createJob(runtime.database, project, await readBody(request)), 201);
-    if (jobMatch[2] && request.method === "POST") return json({ job: await changeJob(runtime.database, project, jobMatch[2], jobMatch[3] as "retry" | "cancel") });
+    if (!jobMatch[2] && request.method === "POST") return json(await createJob(runtime.database, project, await readBody(request), user.name), 201);
+    if (jobMatch[2] && request.method === "POST") return json({ job: await changeJob(runtime.database, project, jobMatch[2], jobMatch[3] as "retry" | "cancel", user.name) });
     throw new ApiError(405, "Method not allowed.");
   }
   const testsMatch = /^\/api\/projects\/([a-f0-9-]{36})\/tests(?:\/([a-f0-9-]{36}))?$/.exec(path);
   if (testsMatch) {
-    const project = await ownedProject(runtime, testsMatch[1], user.id);
+    const project = await accessibleProject(runtime, testsMatch[1], user.id, request.method === "GET" ? "viewer" : "qa");
     if (!testsMatch[2] && request.method === "GET") return json({ tests: await listTestCases(runtime.database, project.id) });
-    if (!testsMatch[2] && request.method === "POST") return json({ test: await saveTestCase(runtime.database, project.id, await readBody(request)) }, 201);
-    if (testsMatch[2] && request.method === "PATCH") return json({ test: await saveTestCase(runtime.database, project.id, await readBody(request), testsMatch[2]) });
-    if (testsMatch[2] && request.method === "DELETE") return json(await deleteTestCase(runtime.database, project.id, testsMatch[2]));
+    if (!testsMatch[2] && request.method === "POST") { const test=await saveTestCase(runtime.database, project.id, await readBody(request)); await audit(runtime.database.query.bind(runtime.database),project.id,user.name,"test.created",test.name); return json({test},201); }
+    if (testsMatch[2] && request.method === "PATCH") { const test=await saveTestCase(runtime.database, project.id, await readBody(request), testsMatch[2]); await audit(runtime.database.query.bind(runtime.database),project.id,user.name,"test.updated",`${test.name} · v${test.version}`); return json({test}); }
+    if (testsMatch[2] && request.method === "DELETE") { const result=await deleteTestCase(runtime.database,project.id,testsMatch[2]);await audit(runtime.database.query.bind(runtime.database),project.id,user.name,"test.deleted",testsMatch[2]);return json(result); }
     throw new ApiError(405, "Method not allowed.");
   }
   const projectMatch = /^\/api\/projects\/([a-f0-9-]{36})(?:\/(token|runs))?$/.exec(path);
   if (projectMatch) {
-    const project = await ownedProject(runtime, projectMatch[1], user.id);
+    const project = await accessibleProject(runtime, projectMatch[1], user.id, request.method === "GET" ? "viewer" : projectMatch[2] === "token" || request.method === "DELETE" ? "owner" : "admin");
     if (projectMatch[2] === "token" && request.method === "POST") {
       const token = "pst_" + randomBytes(32).toString("base64url");
       await runtime.database.query(
         "UPDATE projects SET agent_token_hash = $1, agent_email_verified=true, runner=NULL, agent_last_seen=NULL, updated_at = now() WHERE id = $2 AND owner_id = $3",
         [hashToken(token), project.id, user.id],
       );
+      await runtime.database.query("DELETE FROM qa_runners WHERE project_id=$1", [project.id]);
       await runtime.database.query("UPDATE qa_jobs SET status='blocked', lease_hash=NULL, lease_expires_at=NULL, message='Runner token rotated. Enroll the replacement token before retrying.', updated_at=now() WHERE project_id=$1 AND status='running'", [project.id]);
       return json({ token });
     }
@@ -486,10 +526,11 @@ async function dispatch(
       const input = parse(ChangeProject, await readBody(request));
       if (input.settings) await validateSettings(input.settings, project, runtime);
       const result = await runtime.database.query<ProjectRow>(
-        "UPDATE projects SET settings = $1::jsonb, testing_profile=$4::jsonb, updated_at = now() WHERE id = $2 AND owner_id = $3 RETURNING *",
-        [JSON.stringify(input.settings || project.settings), project.id, user.id, JSON.stringify(input.testingProfile || project.testing_profile || testingDefaults)],
+        "UPDATE projects SET settings = $1::jsonb, testing_profile=$3::jsonb, updated_at = now() WHERE id = $2 RETURNING *",
+        [JSON.stringify(input.settings || project.settings), project.id, JSON.stringify(input.testingProfile || project.testing_profile || testingDefaults)],
       );
-      return json({ project: projectView(result.rows[0]) });
+      await audit(runtime.database.query.bind(runtime.database),project.id,user.name,'project.settings','Models or trusted testing profile updated');
+      return json({ project: projectView({...result.rows[0],access_role:project.access_role}) });
     }
     if (!projectMatch[2] && request.method === "DELETE") {
       await runtime.database.query(
