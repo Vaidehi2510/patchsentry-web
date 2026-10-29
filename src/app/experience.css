@@ -75,6 +75,9 @@ body { font-size: 16px; line-height: 1.55; }
 @keyframes signal-travel { from { transform: translateX(-110%); } to { transform: translateX(390%); } }
 @keyframes status-breathe { 0%,100% { box-shadow: 0 0 0 0 #8da37525; } 50% { box-shadow: 0 0 0 5px #8da37500; } }
 @keyframes rotate-loading { to { transform: rotate(360deg); } }
+@keyframes cta-star-turn { from { transform: rotate(10deg); } to { transform: rotate(370deg); } }
+.cta-asterisk { line-height: 1; }
+html[data-motion=on] .cta-asterisk { animation: cta-star-turn 20s linear infinite; }
 html[data-motion=on] [data-reveal] { transition: opacity .65s ease var(--reveal-delay,0ms), translate .65s cubic-bezier(.2,.75,.25,1) var(--reveal-delay,0ms); }
 html[data-motion=on] [data-reveal=pending] { opacity: 0; translate: 0 20px; }
 html[data-motion=on] [data-reveal=visible] { opacity: 1; translate: 0 0; }
