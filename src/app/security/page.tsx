@@ -19,9 +19,9 @@ export const metadata: Metadata = { title: "Security & boundaries" };
 const boundaries = [
   {
     icon: LockKeyhole,
-    title: "Your inbox is your sign-in key.",
-    text: "Personal, school, and work addresses are welcome. Your account is created only after you open a secure email link. Each link expires after ten minutes and can be used once.",
-    detail: "Sign-in links are delivered through the configured email sender. Verification tokens are stored hashed; SMTP credentials stay on the server. Older unverified sessions cannot access your projects.",
+    title: "Verified email. Password. Second factor.",
+    text: "Verify your email during signup, then choose a password and enroll email codes or a compatible authenticator app. Every new sign-in requires your password and a verified second factor.",
+    detail: "Verification links and email codes use the configured sender. Passwords and email codes are hashed; authenticator secrets and recovery codes are encrypted. Partial and older sessions cannot access project data.",
   },
   {
     icon: Code2,

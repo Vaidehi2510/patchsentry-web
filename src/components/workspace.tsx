@@ -147,7 +147,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     api("/api/session")
       .then(async (d) => {
         if (!d.user) {
-          location.replace("/login");
+          location.replace(d.next || "/login");
           return;
         }
         if (!alive) return;

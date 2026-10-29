@@ -1,3 +1,4 @@
+import {secureSession} from './auth-session';
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
@@ -11,7 +12,7 @@ const mail = new Map<string,string>();
 const config={origin:'https://portal.example',secret:'product-qa-fixture-secret-with-at-least-32-characters',production:false,sendSignInLink:async({email,url}:{email:string;url:string})=>{mail.set(email,url);}};
 let runtime:Runtime, alice:string,bob:string;
 async function call(endpoint:string,method='GET',body?:unknown,cookie?:string,token?:string) { return handleRequest(new Request(config.origin+endpoint,{method,headers:{origin:config.origin,'content-type':'application/json',...(cookie?{cookie}:{}),...(token?{authorization:`Bearer ${token}`}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})}),runtime); }
-async function signup(name:string) {const email=`${name}@example.test`;assert.equal((await call('/api/auth/sign-in/magic-link','POST',{name,email})).status,200);const u=new URL(mail.get(email)!);const r=await call(u.pathname+u.search);assert.equal(r.status,302);return r.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ');}
+async function signup(name:string) {const email=`${name}@example.test`;assert.equal((await call('/api/auth/sign-in/magic-link','POST',{name,email})).status,200);const u=new URL(mail.get(email)!);const r=await call(u.pathname+u.search);assert.equal(r.status,302);return secureSession(runtime,r.headers.getSetCookie().map(v=>v.split(';')[0]).join('; '));}
 before(async()=>{const database=await createPGliteDatabase();await migrateDatabase(database,config);runtime={database,config,auth:createAuth(database,config)};alice=await signup('product-alice');bob=await signup('product-bob');});
 after(async()=>{await runtime?.database.end();});
 const runner={id:'b'.repeat(64),executeJobs:true,ready:true,missing:[],browsers:['chromium'],backends:['local'],maxPages:4,maxCostUsd:2,maxCallsPerRun:20,platforms:['web','api','android','ios','macos','windows','linux'],workspaceTests:true};

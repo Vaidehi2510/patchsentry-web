@@ -1,3 +1,4 @@
+import {secureSession} from './auth-session';
 import test, { before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -75,7 +76,7 @@ async function signup(name: string) {
   assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
   const cookies = response.headers.getSetCookie().map(value => value.split(";")[0]).join("; ");
   assert.ok(cookies.includes("session_token"));
-  return { cookie: cookies, data: await response.json() };
+  return { cookie: await secureSession(runtime,cookies), data: await response.json() };
 }
 
 function report(overrides: Partial<RunInput> = {}): RunInput {
@@ -141,7 +142,8 @@ test("accounts persist only after email verification and sessions identify the c
     'SELECT password FROM account WHERE "userId" = $1',
     [aliceId],
   );
-  assert.equal(stored.rows.length, 0, "Passwordless accounts must not store a password");
+  assert.equal(stored.rows.length, 1);
+  assert.ok(stored.rows[0].password);assert.notEqual(stored.rows[0].password,"Fixture passphrase 2026!");
   assert.equal((await call("/api/projects")).status, 401);
   assert.equal((await call("/api/session")).status, 200);
   assert.equal((await (await call("/api/session")).json()).user, null);

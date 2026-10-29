@@ -1,3 +1,4 @@
+import {secureSession} from './auth-session';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -140,7 +141,7 @@ test('authenticated website job flows through the real connector and process bac
   const request = (endpoint: string, method: string, body?: unknown, cookie?: string) => handleRequest(new Request(config.origin + endpoint, { method, headers: { origin: config.origin, 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), runtime);
   const sent = await request('/api/auth/sign-in/magic-link', 'POST', { name: 'Runner owner', email: 'runner@example.test' }); assert.equal(sent.status, 200);
   const link = new URL(deliveredLink); const signup = await request(link.pathname + link.search, 'GET'); assert.equal(signup.status, 302);
-  const cookie = signup.headers.getSetCookie().map(v => v.split(';')[0]).join('; ');
+  const cookie = await secureSession(runtime,signup.headers.getSetCookie().map(v => v.split(';')[0]).join('; '));
   const created = await request('/api/projects', 'POST', { name: 'Runner integration', repository: 'owner/product' }, cookie); const project = (await created.json()).project;
   const issued = await request(`/api/projects/${project.id}/token`, 'POST', {}, cookie); const token = (await issued.json()).token;
   const client = new PortalClient({ url: config.origin, token, fetchImpl: async (url: any, init: any) => handleRequest(new Request(url, init), runtime) });

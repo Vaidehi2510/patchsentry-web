@@ -1,3 +1,4 @@
+import {secureSession,loginSession} from './auth-session';
 import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { createPGliteDatabase } from "../src/lib/server/database";
@@ -32,10 +33,11 @@ test("requesting a link creates no account or session; clicking creates one veri
   assert.ok(stored.rows.length); assert.ok(!JSON.stringify(stored.rows).includes(token));
   assert.ok(!JSON.stringify(await response.json()).includes(token));
   const verified = await f.verify();
-  assert.equal(verified.status, 302); assert.equal(verified.headers.get("location"), f.runtime.config.origin + "/app");
+  assert.equal(verified.status, 302); assert.equal(verified.headers.get("location"), f.runtime.config.origin + "/auth/setup");
   assert.ok(cookies(verified).includes("session_token"));
   const users = (await f.users()).rows; assert.equal(users.length, 1); assert.equal(users[0].emailVerified, true);
-  assert.equal((await f.call("/api/projects", undefined, cookies(verified))).status, 200);
+  assert.equal((await f.call("/api/projects", undefined, cookies(verified))).status, 401);
+  const complete=await secureSession(f.runtime,cookies(verified));assert.equal((await f.call("/api/projects",undefined,complete)).status,200);
   const replay = await f.verify(); assert.equal(cookies(replay), ""); assert.match(replay.headers.get("location") || "", /INVALID_TOKEN/);
 });
 
@@ -53,7 +55,7 @@ test("expired and malformed links create no accounts and concurrent verification
 });
 
 test("legacy unverified sessions cannot access projects; proving email ownership revokes them", async t => {
-  const f = await fixture(t); await f.send(); const initial = await f.verify(); const oldCookie = cookies(initial);
+  const f = await fixture(t); await f.send(); const initial = await f.verify(); const oldCookie = await secureSession(f.runtime,cookies(initial));
   const created = await f.call("/api/projects", { name: "Existing beta project", repository: "builder/legacy-project" }, oldCookie);
   const project = (await created.json()).project;
   const issued = await f.call(`/api/projects/${project.id}/token`, {}, oldCookie);
@@ -69,11 +71,13 @@ test("legacy unverified sessions cannot access projects; proving email ownership
   await f.send(); const proved = await f.verify();
   assert.ok(cookies(proved));
   assert.equal((await f.call("/api/projects", undefined, oldCookie)).status, 401);
-  assert.equal((await f.call("/api/projects", undefined, cookies(proved))).status, 200);
-  const projects = (await (await f.call("/api/projects", undefined, cookies(proved))).json()).projects;
+  assert.equal((await f.call("/api/projects", undefined, cookies(proved))).status, 401);
+  assert.equal((await f.call("/api/security/password",{password:"Fixture passphrase 2026!",confirmPassword:"Fixture passphrase 2026!"},cookies(proved))).status,200);
+  const signedIn=await loginSession(f.runtime,"reader@example.test",cookies(proved));
+  const projects = (await (await f.call("/api/projects", undefined, signedIn)).json()).projects;
   assert.equal(projects[0].id, project.id); assert.equal(projects[0].tokenConfigured, false);
   assert.equal((await agent()).status, 401);
-  assert.equal((await f.call(`/api/projects/${project.id}/token`, {}, cookies(proved))).status, 200);
+  assert.equal((await f.call(`/api/projects/${project.id}/token`, {}, signedIn)).status, 200);
   assert.equal((await agent()).status, 401, "Rotation must keep the old token revoked");
   assert.equal((await f.users()).rows[0].emailVerified, true);
 });
@@ -81,7 +85,7 @@ test("legacy unverified sessions cannot access projects; proving email ownership
 test("password registration, arbitrary callbacks, malformed email and unavailable delivery cannot create accounts", async t => {
   const f = await fixture(t);
   assert.equal((await f.call("/api/auth/sign-up/email", { name: "Fake", email: "fake@example.test", password: "long-but-unverified-password" })).status, 404);
-  assert.equal((await f.call("/api/auth/sign-in/email", { email: "fake@example.test", password: "anything" })).status, 404);
+  assert.equal((await f.call("/api/auth/sign-in/email", { email: "fake@example.test", password: "anything" })).status, 401);
   assert.equal((await f.call("/api/auth/sign-in/magic-link", { email: "not-an-email" })).status, 400);
   assert.equal((await f.call("/api/auth/sign-in/magic-link", { email: "reader@example.test", callbackURL: "https://evil.example" })).status, 400);
   f.runtime.config.sendSignInLink = undefined;

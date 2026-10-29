@@ -1,7 +1,8 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
-import { magicLink } from "better-auth/plugins";
-import { gmailSender, type SendSignInLink } from "./email";
+import { magicLink, twoFactor } from "better-auth/plugins";
+import { gmailSender, gmailSecuritySender, type SendSignInLink, type SendSecurityCode } from "./email";
+import { sendFactorCode } from './factor-delivery';
 import type { Database } from "./database";
 
 export interface AuthConfig {
@@ -9,6 +10,7 @@ export interface AuthConfig {
   origin: string;
   production: boolean;
   sendSignInLink?: SendSignInLink;
+  sendSecurityCode?: SendSecurityCode;
 }
 
 export function authConfig(
@@ -37,7 +39,7 @@ export function authConfig(
     throw new Error("BETTER_AUTH_URL must be an exact site origin");
   if (production && (url.protocol !== "https:" || !env.DATABASE_URL))
     throw new Error("Production requires HTTPS and DATABASE_URL");
-  return { secret: env.BETTER_AUTH_SECRET, origin: url.origin, production, sendSignInLink: gmailSender(url.origin, env) };
+  return { secret: env.BETTER_AUTH_SECRET, origin: url.origin, production, sendSignInLink: gmailSender(url.origin, env), sendSecurityCode:gmailSecuritySender(env) };
 }
 
 export function authOptions(
@@ -51,7 +53,9 @@ export function authOptions(
     secret: config.secret,
     database: database as unknown as NonNullable<BetterAuthOptions["database"]>,
     trustedOrigins: [config.origin],
-    emailAndPassword: { enabled: false },
+    emailAndPassword: { enabled: true, disableSignUp:true, requireEmailVerification:true, minPasswordLength:12, maxPasswordLength:128, revokeSessionsOnPasswordReset:true,
+      async sendResetPassword({user,url}) { if(!config.sendSignInLink)throw new Error('Email delivery unavailable');await config.sendSignInLink({email:user.email,url,purpose:'reset'}); },
+    },
     plugins: [magicLink({
       expiresIn: 600,
       storeToken: "hashed",
@@ -60,7 +64,7 @@ export function authOptions(
         if (!config.sendSignInLink) throw new Error("Email sign-in is not configured.");
         await config.sendSignInLink(message);
       },
-    })],
+    }), twoFactor({issuer:'Patchsentry',skipVerificationOnEnable:false,otpOptions:{storeOTP:'hashed',period:5,allowedAttempts:5,async sendOTP({user,otp}){await sendFactorCode(database,config,user.id,user.email,otp);}},backupCodeOptions:{storeBackupCodes:'encrypted'},accountLockout:{enabled:true,maxFailedAttempts:10,durationSeconds:900}})],
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
     rateLimit: {
       enabled: true,
@@ -70,6 +74,8 @@ export function authOptions(
       customRules: {
         "/sign-in/magic-link": { window: 60, max: 3 },
         "/magic-link/verify": { window: 60, max: 10 },
+        "/sign-in/email": {window:60,max:5},
+        "/request-password-reset": {window:60,max:3},
       },
     },
     advanced: {
@@ -96,6 +102,11 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
       "Authentication database schema needs review before migration",
     );
   await migrations.runMigrations();
+  await database.query('CREATE TABLE IF NOT EXISTS qa_auth_profiles (user_id text PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,method text CHECK(method IN (\'totp\',\'email\')),pending_method text CHECK(pending_method IN (\'totp\',\'email\')))');
+  await database.query('CREATE TABLE IF NOT EXISTS qa_auth_proofs (session_id text PRIMARY KEY REFERENCES "session"(id) ON DELETE CASCADE,password_verified boolean NOT NULL DEFAULT false,mfa_verified boolean NOT NULL DEFAULT false)');
+  await database.query('CREATE TABLE IF NOT EXISTS qa_totp_used (user_id text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,code_hash text NOT NULL,expires_at timestamptz NOT NULL,PRIMARY KEY(user_id,code_hash))');
+  await database.query('CREATE TABLE IF NOT EXISTS qa_auth_challenges (id text PRIMARY KEY,user_id text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,expires_at timestamptz NOT NULL)');
+  await database.query('CREATE TABLE IF NOT EXISTS qa_security_limits (id text PRIMARY KEY,attempts integer NOT NULL,expires_at timestamptz NOT NULL)');
   await database.query(`CREATE TABLE IF NOT EXISTS projects (
     id text PRIMARY KEY, owner_id text NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     name text NOT NULL, repository text NOT NULL, settings jsonb NOT NULL,

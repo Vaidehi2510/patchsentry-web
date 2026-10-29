@@ -1,3 +1,4 @@
+import {secureSession} from './auth-session';
 import test,{before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -12,7 +13,7 @@ const config={origin:'https://portal.example',secret:'team-qa-integration-test-s
 let runtime:Runtime;const accounts:Record<string,{cookie:string;id:string}>={};
 async function api(path:string,method='GET',body?:unknown,as='owner',token?:string){return handleRequest(new Request(config.origin+path,{method,headers:{origin:config.origin,'x-forwarded-for':`192.0.2.${['owner','admin','engineer','viewer','outsider'].indexOf(as)+1}`,'content-type':'application/json',...(token?{authorization:`Bearer ${token}`}:{cookie:accounts[as]?.cookie || ''})},...(body===undefined?{}:{body:JSON.stringify(body)})}),runtime);}
 before(async()=>{const database=await createPGliteDatabase();await migrateDatabase(database,config);runtime={database,config,auth:createAuth(database,config)};
- for(const name of ['owner','admin','engineer','viewer','outsider']){const email=`${name}@example.test`;assert.equal((await api('/api/auth/sign-in/magic-link','POST',{email,name},name)).status,200);const u=new URL(emails.get(email)!);const r=await api(u.pathname+u.search);accounts[name]={cookie:r.headers.getSetCookie().map(v=>v.split(';')[0]).join('; '),id:''};const user=(await(await api('/api/session','GET',undefined,name)).json()).user;accounts[name].id=user.id;}
+ for(const name of ['owner','admin','engineer','viewer','outsider']){const email=`${name}@example.test`;assert.equal((await api('/api/auth/sign-in/magic-link','POST',{email,name},name)).status,200);const u=new URL(emails.get(email)!);const r=await api(u.pathname+u.search);accounts[name]={cookie:await secureSession(runtime,r.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ')),id:''};const user=(await(await api('/api/session','GET',undefined,name)).json()).user;accounts[name].id=user.id;}
 });
 after(async()=>runtime.database.end());
 const runner={id:'b'.repeat(64),executeJobs:true,ready:true,missing:[],browsers:['chromium'],backends:['local'],maxPages:4,maxCostUsd:2,maxCallsPerRun:20,platforms:['windows'],workspaceTests:true};

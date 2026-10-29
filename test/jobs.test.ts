@@ -1,3 +1,4 @@
+import {secureSession} from './auth-session';
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -28,7 +29,7 @@ async function signup(name: string) {
   const link = new URL(mailbox.get(email)!);
   const result = await call(link.pathname + link.search);
   assert.equal(result.status, 302);
-  return result.headers.getSetCookie().map(v => v.split(';')[0]).join('; ');
+  return secureSession(runtime,result.headers.getSetCookie().map(v => v.split(';')[0]).join('; '));
 }
 async function project(ready = true) {
   const created = await call('/api/projects', 'POST', { name: 'Test project', repository: `owner/product-${randomUUID()}` }, alice);

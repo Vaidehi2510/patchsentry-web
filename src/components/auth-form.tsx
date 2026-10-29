@@ -1,83 +1,34 @@
 "use client";
-import Link from "next/link";
-import { BrandMark } from "./marketing/site-shell";
-import { MotionToggle } from "./motion";
-import { useEffect, useState, type FormEvent } from "react";
-import { ArrowRight, ArrowLeft, ShieldCheck, Check, Mail, Inbox, LoaderCircle } from "lucide-react";
-import "./workspace.css";
-
-export function AuthForm({ mode }: { mode: "login" | "signup" }) {
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-  const [configured, setConfigured] = useState<boolean | null>(null);
-  const [sentTo, setSentTo] = useState("");
-  const [retryAt, setRetryAt] = useState(0);
-  const [seconds, setSeconds] = useState(0);
-  useEffect(() => {
-    if (new URLSearchParams(location.search).get("error")) setError("That link has expired or has already been used. Request a fresh link below.");
-    let alive = true;
-    fetch("/api/session", { cache: "no-store" }).then(r => r.json()).then(d => {
-      if (!alive) return;
-      setConfigured(d.configured && d.emailSignInReady);
-      if (d.user) location.replace("/app");
-    }).catch(() => { if (alive) setConfigured(false); });
-    return () => { alive = false; };
-  }, []);
-  useEffect(() => {
-    const update = () => setSeconds(Math.max(0, Math.ceil((retryAt - Date.now()) / 1000)));
-    update();
-    const timer = setInterval(update, 1000);
-    return () => clearInterval(timer);
-  }, [retryAt]);
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (pending || seconds > 0) return;
-    setPending(true); setError("");
-    const data = new FormData(e.currentTarget);
-    const email = String(data.get("email") || "").trim();
-    try {
-      const response = await fetch("/api/auth/sign-in/magic-link", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, ...(mode === "signup" ? { name: data.get("name") } : {}) }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.message || body.error || "We couldn't send your link. Please try again.");
-      setSentTo(email); setRetryAt(Date.now() + 60000);
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not reach the server."); }
-    finally { setPending(false); }
-  }
-  return <main className="auth-page">
-    <aside className="auth-story">
-      <Link className="wordmark" href="/"><BrandMark />patchsentry<span className="beta-tag">BETA</span></Link>
-      <div><span className="eyebrow">FOR YOUR NEXT BIG THING</span><h2>A little less<br />“hope it works.”<br /><em>A lot more proof.</em></h2>
-        <p>From your weekend project to your team’s next release. Your code, your models, your decision.</p>
-        <ul className="auth-points"><li><Check size={19} /> Personal and team projects welcome</li><li><Check size={19} /> Tests and release evidence you can inspect</li><li><Check size={19} /> Your product code stays untouched</li></ul>
-      </div><small><ShieldCheck size={18} /> One secure link. Your own QA workspace.</small>
-    </aside>
-    <section className="auth-panel">
-      <div className="auth-topline"><Link href="/" className="back-link"><ArrowLeft size={18} /> Back to home</Link><MotionToggle /></div>
-      <div className="auth-card">
-        <span className="auth-mail-icon">{sentTo ? <Inbox size={29} /> : <Mail size={29} />}</span>
-        <span className="eyebrow">{sentTo ? "ONE LAST STEP" : mode === "signup" ? "YOUR IDEAS DESERVE GOOD QA" : "WELCOME BACK"}</span>
-        <h1>{sentTo ? "Check your inbox." : mode === "signup" ? "Start with your email." : "A link. And you’re in."}</h1>
-        <p>{sentTo ? <>We sent a secure sign-in link to <strong>{sentTo}</strong>. Open it to verify your email and continue.</> : <>Use your personal, school, or work email. We’ll send a secure link—no password to remember.</>}</p>
-        {sentTo && <div className="email-next-steps" role="status"><span><Check size={18} /> Link sent to your inbox</span><span><Mail size={18} /> Open it within 10 minutes</span><span><ShieldCheck size={18} /> Your account is created only after verification</span></div>}
-        {configured === false && <div role="status" className="notice warning"><p>Email sign-in is being connected. <Link href="/demo">Explore the demo</Link> while the sender setup is completed.</p></div>}
-        <form onSubmit={submit} hidden={Boolean(sentTo)}>
-          {mode === "signup" && <label>Your name<input name="name" autoComplete="name" required maxLength={100} placeholder="Alex Morgan" /></label>}
-          <label>Email address<input type="email" name="email" autoComplete="email" required maxLength={254} placeholder="you@example.com" autoCapitalize="none" spellCheck={false} /></label>
-          {error && !sentTo && <p className="form-error" role="alert">{error}</p>}
-          <button className="button button-primary auth-submit" disabled={pending || configured !== true}>
-            {pending ? <><LoaderCircle size={19} className="loading-spin" /> Sending your link…</> : <>Send me a secure link <ArrowRight size={19} /></>}
-          </button>
-        </form>
-        {sentTo && <><p className="fineprint">Can’t find it? Check Spam and Promotions. The link is single-use and works on the device where you open it.</p><button className="button button-secondary auth-submit" disabled={seconds > 0} onClick={() => { setSentTo(""); setError(""); }}>{seconds > 0 ? `Request another link in ${seconds}s` : "Use another email or request a new link"}</button></>}
-        {!sentTo && <p className="auth-switch">{mode === "signup" ? "Already have an account?" : "First time here?"} <Link href={mode === "signup" ? "/login" : "/signup"}>{mode === "signup" ? "Sign in" : "Create an account"}</Link></p>}
-        <div className="auth-divider"><span>EXPLORE BEFORE YOU CONNECT</span></div>
-        <Link href="/demo" className="button button-secondary auth-submit">Try the interactive demo <ArrowRight size={19} /></Link>
-        <p className="fineprint">No credit card. No company email required. Creating an account grants no access to your repositories.</p>
-      </div>
-      <footer><Link href="/security">Security & privacy</Link><span>Made for independent minds and teams.</span></footer>
-    </section>
-  </main>;
+import Link from 'next/link';
+import {useEffect,useState,type FormEvent} from 'react';
+import {ArrowLeft,ArrowRight,Check,ShieldCheck,Mail,LoaderCircle} from 'lucide-react';
+import {BrandMark} from './marketing/site-shell';
+import {MotionToggle} from './motion';
+import './workspace.css';
+export function AuthFrame({children}:{children:React.ReactNode}){return <main className="auth-page"><aside className="auth-story"><Link className="wordmark" href="/"><BrandMark/>patchsentry<span className="beta-tag">BETA</span></Link><div><span className="eyebrow">FOR YOUR NEXT BIG THING</span><h2>A little less<br/>“hope it works.”<br/><em>A lot more proof.</em></h2><p>From your weekend project to your team’s next release. Your code, your models, your decision.</p><ul className="auth-points"><li><Check size={19}/>Personal and team projects welcome</li><li><Check size={19}/>Tests and release evidence you can inspect</li><li><Check size={19}/>Your product code stays untouched</li></ul></div><small><ShieldCheck size={18}/>Your password. Your second factor. Your workspace.</small></aside><section className="auth-panel"><div className="auth-topline"><Link href="/" className="back-link"><ArrowLeft size={18}/>Back to home</Link><MotionToggle/></div><div className="auth-card">{children}</div><footer><Link href="/security">Security &amp; privacy</Link><span>Made for independent minds and teams.</span></footer></section></main>;}
+export async function authPost(path:string,body:unknown){const r=await fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const v=await r.json();if(!r.ok)throw new Error(v.error||v.message||'Could not complete this step. Please try again.');return v;}
+export function AuthForm({mode}:{mode:'login'|'signup'|'reset'}){
+ const [busy,setBusy]=useState(false),[error,setError]=useState(''),[ready,setReady]=useState(false),[sent,setSent]=useState(''),[forgot,setForgot]=useState(false),[cooldown,setCooldown]=useState(0),[seconds,setSeconds]=useState(0),[show,setShow]=useState(false),[resetDone,setResetDone]=useState(false);
+ useEffect(()=>{if(new URLSearchParams(location.search).get('error'))setError('That link has expired or has already been used. Request a fresh link.');let alive=true;fetch('/api/session',{cache:'no-store'}).then(r=>r.json()).then(d=>{if(!alive)return;setReady(d.configured && (mode==='signup'?d.emailSignInReady:true));if(mode!=='reset'&&(d.user||d.next==='/auth/setup'))location.replace(d.next||'/app');}).catch(()=>{if(alive)setError('Could not connect. Please refresh to try again.');});return()=>{alive=false;};},[mode]);
+ useEffect(()=>{const update=()=>setSeconds(Math.max(0,Math.ceil((cooldown-Date.now())/1000)));update();const timer=setInterval(update,1000);return()=>clearInterval(timer);},[cooldown]);
+ async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();if(busy||seconds)return;const data=new FormData(e.currentTarget);setBusy(true);setError('');try{
+  const email=String(data.get('email')||'').trim();
+  if(mode==='reset'){const password=String(data.get('password'));if(password!==data.get('confirmPassword'))throw new Error('Passwords must match.');await authPost('/api/auth/reset-password',{newPassword:password,token:new URLSearchParams(location.search).get('token')||''});setResetDone(true);}
+  else if(forgot){await authPost('/api/auth/request-password-reset',{email});setSent(email);setCooldown(Date.now()+60000);}
+  else if(mode==='signup'){await authPost('/api/auth/sign-in/magic-link',{email,name:data.get('name')});setSent(email);setCooldown(Date.now()+60000);}
+  else{const result=await authPost('/api/auth/sign-in/email',{email,password:data.get('password')});location.assign(result.next||'/auth/setup');}
+ }catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ const title=resetDone?'Password updated.':sent?'Check your inbox.':mode==='reset'?'Choose a new password.':forgot?'Reset your password.':mode==='signup'?'Start with your email.':'Welcome back.';
+ return <AuthFrame><span className="auth-mail-icon">{mode==='login'?<ShieldCheck size={29}/>:<Mail size={29}/>}</span><span className="eyebrow">{mode==='signup'?'VERIFY · PASSWORD · SECOND FACTOR':'YOUR SECURE QA WORKSPACE'}</span><h1>{title}</h1><p>{resetDone?'Sign in with your new password, then complete your configured second factor.':sent?<>If this address is eligible, we sent {forgot?'a password reset link':'an email verification link'} to <strong>{sent}</strong>. {forgot?'Your second factor remains required.':'After verifying, choose a password and set up two-step verification.'}</>:mode==='signup'?'Use your personal, school, or work email. Verify ownership first; then secure your account with a password and second factor.':mode==='reset'?'Use at least 12 characters. Resetting a password does not disable two-step verification.':forgot?'We’ll send a one-time reset link if this account exists.':'Enter your email and password, then verify with your authenticator app or email code.'}</p>
+ {resetDone?<Link className="button button-primary auth-submit" href="/login">Continue to sign in<ArrowRight size={18}/></Link>:<form onSubmit={submit} hidden={Boolean(sent)}>
+ {mode==='signup'&&<label>Your name<input name="name" autoComplete="name" required maxLength={100} placeholder="Alex Morgan"/></label>}
+ {mode!=='reset'&&<label>Email address<input type="email" name="email" autoComplete="email" required maxLength={254} placeholder="you@example.com" autoCapitalize="none" spellCheck={false}/></label>}
+ {(mode==='reset'||mode==='login'&&!forgot)&&<><label>{mode==='reset'?'New password':'Password'}<input type={show?'text':'password'} name="password" autoComplete={mode==='reset'?'new-password':'current-password'} required minLength={mode==='reset'?12:1} maxLength={128}/></label>{mode==='reset'&&<label>Confirm password<input type={show?'text':'password'} name="confirmPassword" autoComplete="new-password" required minLength={12} maxLength={128}/></label>}<label className="testing-checkbox"><input type="checkbox" checked={show} onChange={e=>setShow(e.target.checked)}/>Show password</label></>}
+ {error&&<p className="form-error" role="alert">{error}</p>}<button className="button button-primary auth-submit" disabled={busy||!ready}>{busy?<><LoaderCircle size={18} className="loading-spin"/>Please wait…</>:<>{mode==='reset'?'Save new password':forgot?'Send reset link':mode==='signup'?'Verify my email':'Continue to verification'}<ArrowRight size={18}/></>}</button>
+ </form>}
+ {sent&&<><div className="email-next-steps" role="status"><span><Check size={18}/>Check Spam and Promotions too</span><span><ShieldCheck size={18}/>{forgot?'Password reset keeps your second factor enabled':'Your account is created only after email verification'}</span></div><button className="button button-secondary auth-submit" disabled={seconds>0} onClick={()=>{setSent('');setError('');}}>{seconds?`Request another link in ${seconds}s`:'Use another email or request a new link'}</button></>}
+ {mode==='login'&&!sent&&<button type="button" className="text-button auth-help" onClick={()=>{setForgot(!forgot);setError('');}}>{forgot?'Back to sign in':'Forgot your password?'}</button>}
+ {mode!=='reset'&&!sent&&<p className="auth-switch">{mode==='signup'?'Already have an account?':'First time here?'} <Link href={mode==='signup'?'/login':'/signup'}>{mode==='signup'?'Sign in':'Create an account'}</Link></p>}
+ {mode==='login'&&!forgot&&<p className="fineprint">Previously used email links? <Link href="/signup">Request a setup link</Link> if you haven’t chosen a password yet.</p>}
+ {!ready&&<p role="status" className="fineprint">Connecting securely… Signup requires a configured email sender.</p>}<div className="auth-divider"><span>EXPLORE BEFORE YOU CONNECT</span></div><Link href="/demo" className="button button-secondary auth-submit">Try the interactive demo<ArrowRight size={18}/></Link></AuthFrame>;
 }

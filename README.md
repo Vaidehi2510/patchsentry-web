@@ -10,7 +10,7 @@ The website is the control and reporting interface. The separate QA engine execu
 
 - Responsive product, workflow, security, and integration documentation pages.
 - A clearly labeled interactive demo; demo metrics never appear as real customer results.
-- Verified, passwordless email-link accounts, secure session cookies, and database-backed login rate limits. Accounts are created only after a link is verified.
+- Email-first signup followed by mandatory password and two-factor enrollment; password plus second factor on every new login. Secure cookies, server-side session assurance and database-backed rate limits.
 - Account-scoped projects, reports, model settings, and one-time runner enrollment tokens.
 - A live OpenRouter catalog with context sizes, tool/vision capabilities, and pricing.
 - Local model inventories reported by an outbound connector; the website never contacts users’ localhost servers.
@@ -77,7 +77,7 @@ The Vercel build wrapper runs the reviewed migrations inside the production buil
 
 ### Email setup
 
-Personal, school, and work email addresses can all create accounts. No company domain is required. A user requests a link, receives a branded email, then opens its single-use link within ten minutes. Requesting a link does not create a user or session. Password registration and password login are disabled. Existing unverified accounts must prove inbox ownership; their previous sessions are revoked when they verify. Existing beta project tokens must be regenerated in Integrations after verification. Projects and reports are preserved; a token issued before mailbox verification cannot regain access after the account is verified.
+Personal, school, and work email addresses can all create accounts. No company domain is required. A user requests a link, receives a branded email, then opens its single-use link within ten minutes. Requesting a link does not create a user or session. Direct password registration is disabled. After verification, users choose a 12–128 character password and verify email-code or authenticator-app enrollment before any project access. Normal login requires email/password and the configured factor; it sends no email-verification link. Password reset uses a single-use emailed link and retains MFA. Existing unverified accounts must prove inbox ownership; their previous sessions are revoked when they verify. Existing beta project tokens must be regenerated in Integrations after verification. Projects and reports are preserved; a token issued before mailbox verification cannot regain access after the account is verified.
 
 For a free beta sender without purchasing a domain, create a dedicated Gmail account, enable 2-Step Verification, and generate an app password at <https://myaccount.google.com/apppasswords>. Add `SMTP_USER` and `SMTP_PASSWORD` directly in the hosting provider's server-only environment settings. Gmail SMTP uses authenticated TLS on port 465. Never commit these values or add a `NEXT_PUBLIC_` prefix. Gmail applies its own delivery limits; use a dedicated transactional provider for a larger rollout. Resend can be added later with a domain you control.
 
@@ -106,7 +106,7 @@ Tests use real Better Auth sessions and PostgreSQL-compatible storage. They cove
 ## Boundaries of this release
 
 - No unattended QA service is provisioned by signing up. A trusted runner and the QA engine must be configured for each product.
-- Email links establish inbox ownership, not repository ownership. Billing, SAML/SCIM and GitHub OAuth installation are not enabled in this beta. Password recovery is unnecessary for passwordless accounts.
+- Email links establish inbox ownership, not repository ownership. Billing, SAML/SCIM and GitHub OAuth installation are not enabled in this beta. Password recovery retains the configured second factor and revokes existing sessions and pending login challenges.
 - Registering a repository grants no GitHub access. A project token reads its project’s settings, claims locally enrolled jobs and submits reports; it cannot read another account’s data.
 - Report scores are `floor(passed required checks / all required checks × 100)`. No required checks means no score. Failed, blocked, skipped, unsupported, and pending checks cannot count as passed. High-severity AI findings require review even when checks pass.
 - AI findings are unverified suggestions. A score is neither test coverage nor a guarantee that a product is bug-free.
@@ -133,3 +133,13 @@ See [platform coverage](https://patchsentry.vercel.app/coverage) and the [source
 ## Team operations
 
 Owners, admins, QA engineers and viewers have distinct API-enforced roles. Invitations are verified-email-bound, single-use and expire in seven days; share their one-time code privately. Each product can opt into Slack lifecycle updates without storing bot tokens on the website. A connector needs both local `teamUpdates` enrollment and `--slack-updates`; add `--github-context` and a read-only GitHub token for pinned author/releaser metadata. Worker fleets default to one job per product and support explicitly selected concurrency up to eight across compatible workers. See the [full setup and limits](https://github.com/Vaidehi2510/QA-testbot/blob/main/docs/team-operations.md).
+
+## Passwords and required two-step verification
+
+Signup verifies email once, then routes to `/auth/setup` for password creation and mandatory second-factor enrollment. Email codes use the existing Gmail sender; authenticator enrollment supports Google Authenticator, Microsoft Authenticator and other standard TOTP apps via a locally rendered QR code or manual key. Authenticator users receive ten single-use recovery codes. SMS is deferred until an SMS provider is selected/configured.
+
+Every new password login requires its selected factor. The API disallows trust-device flags, factor disabling and passwordless login bypasses. Server-side `qa_auth_proofs` gate all user/project APIs; holding an email-verified or password-only session is insufficient. Native Better Auth routes are allowlisted, and complete sessions are marked only after genuine code verification. Email codes are hashed, expire in five minutes and permit five attempts per issued code. Authenticator secrets and recovery codes use Better Auth encryption, with account lockout, request throttling and additional short-lived code replay protection. Password hashes use Better Auth’s password implementation. No password, QR secret or code is sent to a QA model.
+
+Existing projects and memberships are preserved. Existing users must finish password/MFA setup before using the website; old sessions have no assurance proof. Previously issued automation project tokens remain separate credentials and continue to require a verified owner; issuing/rotating a token through the UI requires full password + MFA assurance.
+
+For recovery, `/reset-password` accepts a single-use email reset token, revokes active sessions and in-flight login challenges, and returns the user to password + MFA login. Password reset never disables the factor. Authenticator recovery codes must be saved during setup; automatic second-factor resets are intentionally not exposed. New security tables are added through the production migration wrapper.

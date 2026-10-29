@@ -1,3 +1,4 @@
+import {securityState, securityEndpoint, credentialExists, passwordSignIn, authCall, securitySignOut, resetWithMfa, setupRequestLimit, SecurityError} from './session-security';
 import { roleRank, SlackSettingsSchema, slackDefaults, type AccessRole } from '../team';
 import { audit, members, invite, acceptInvite, removeMember, queueNotification, claimNotification, finishNotification } from './team';
 import { releaseGate } from "../release-gate";
@@ -175,12 +176,9 @@ function sanitize<T>(value: T): T {
   return value;
 }
 async function userFor(request: Request, runtime: Runtime) {
-  const session = await runtime.auth.api.getSession({
-    headers: request.headers,
-  });
-  if (!session?.user) throw new ApiError(401, "Sign in to continue.");
-  if (!session.user.emailVerified) throw new ApiError(401, "Verify your email with a new sign-in link to continue.");
-  return session.user;
+  const state=await securityState(request,runtime);
+  if(state.step!=='complete'||!state.session)throw new ApiError(401,'Complete password sign-in and two-step verification to continue.');
+  return state.session.user;
 }
 async function accessibleProject(
   runtime: Runtime,
@@ -285,50 +283,33 @@ async function dispatch(
   const path = url.pathname.replace(/\/$/, "");
   if (path === "/api/session" && request.method === "GET") {
     if (!runtime) return json({ user: null, configured: false, emailSignInReady: false });
-    const session = await runtime.auth.api.getSession({
-      headers: request.headers,
-    });
-    return json({
-      user: session?.user.emailVerified
-        ? {
-            id: session.user.id,
-            name: session.user.name,
-            email: session.user.email,
-          }
-        : null,
-      configured: true,
-      emailSignInReady: Boolean(runtime.config.sendSignInLink),
-    });
+    const state=await securityState(request,runtime);
+    return json({user:state.step==='complete'&&state.session ? {id:state.session.user.id,name:state.session.user.name,email:state.session.user.email}:null,configured:true,emailSignInReady:Boolean(runtime.config.sendSignInLink),next:state.step==='complete'?'/app':state.step==='login'?'/login':'/auth/setup'});
   }
   if (!runtime)
     throw new ApiError(
       503,
       "Account storage is not configured. Set the database and authentication environment variables.",
     );
+  if(path.startsWith('/api/security/')){if(request.method!=='GET')requireOrigin(request,runtime.config.origin);return securityEndpoint(request,runtime,request.method==='POST'?await readBody(request):undefined);}
   if (path.startsWith("/api/auth/")) {
-    const allowed = new Set(["POST /api/auth/sign-in/magic-link", "GET /api/auth/magic-link/verify", "POST /api/auth/sign-out"]);
-    if (!allowed.has(`${request.method} ${path}`)) throw new ApiError(404, "Use a verified email link to sign in.");
-    if (!["GET", "POST"].includes(request.method))
-      throw new ApiError(405, "Method not allowed.");
-    if (request.method === "POST") {
-      requireOrigin(request, runtime.config.origin);
-      let body = await readBody(request);
-      if (path === "/api/auth/sign-in/magic-link") {
-        if (!runtime.config.sendSignInLink) throw new ApiError(503, "Email sign-in is being connected. You can explore the demo in the meantime.");
-        const input = parse(z.object({ email: z.email().max(254).transform(v => v.toLowerCase()), name: z.string().trim().min(1).max(100).optional() }).strict(), body);
-        body = { ...input, name: input.name || input.email.split("@")[0].slice(0, 100), callbackURL: "/app", newUserCallbackURL: "/app", errorCallbackURL: "/login" };
-      }
-      const headers = new Headers(request.headers);
-      headers.delete("content-length");
-      return runtime.auth.handler(
-        new Request(request.url, {
-          method: request.method,
-          headers,
-          body: JSON.stringify(body),
-        }),
-      );
+    const allowed=new Set(['POST /api/auth/sign-in/magic-link','GET /api/auth/magic-link/verify','POST /api/auth/sign-out','POST /api/auth/sign-in/email','POST /api/auth/request-password-reset','POST /api/auth/reset-password']);
+    if(!allowed.has(`${request.method} ${path}`) && !(request.method==='GET' && /^\/api\/auth\/reset-password\/[A-Za-z0-9_-]+$/.test(path)))throw new ApiError(404,'Use the password and two-step verification flow.');
+    if(request.method==='GET')return runtime.auth.handler(request);
+    requireOrigin(request,runtime.config.origin);const raw=await readBody(request);
+    if(path==='/api/auth/sign-in/email')return passwordSignIn(request,runtime,raw);
+    if(path==='/api/auth/sign-in/magic-link'){
+      const input=parse(z.object({email:z.email().max(254).transform(v=>v.toLowerCase()),name:z.string().trim().min(1).max(100).optional()}).strict(),raw);
+      await setupRequestLimit(request,runtime);
+      // Setup links cannot replace password + 2FA for an enrolled account.
+      const prior=(await runtime.database.query<{id:string;emailVerified:boolean}>('SELECT id,"emailVerified" FROM "user" WHERE lower(email)=$1',[input.email])).rows[0];
+      if(prior?.emailVerified && await credentialExists(runtime,prior.id))return json({status:true});
+      if(!runtime.config.sendSignInLink)throw new ApiError(503,'Email verification delivery is unavailable.');
+      return authCall(request,runtime,'/sign-in/magic-link',{...input,name:input.name || input.email.split('@')[0].slice(0,100),callbackURL:'/auth/setup',newUserCallbackURL:'/auth/setup',errorCallbackURL:'/login'});
     }
-    return runtime.auth.handler(request);
+    if(path==='/api/auth/request-password-reset'){const input=parse(z.object({email:z.email().max(254)}).strict(),raw);return authCall(request,runtime,'/request-password-reset',{...input,redirectTo:'/reset-password'});}
+    if(path==='/api/auth/reset-password'){const input=parse(z.object({token:z.string().min(1).max(300),newPassword:z.string().min(12).max(128)}).strict(),raw);return resetWithMfa(request,runtime,input);}
+    return securitySignOut(request,runtime);
   }
   if (path.startsWith("/api/agent/")) {
     const project = await agentProject(request, runtime);
@@ -554,7 +535,7 @@ export async function handleRequest(
       injected === undefined ? await getRuntime() : injected,
     );
   } catch (error) {
-    if (error instanceof ApiError || error instanceof JobError)
+    if (error instanceof ApiError || error instanceof JobError || error instanceof SecurityError)
       return json({ error: error.message }, error.status);
     // Database credentials, session data and provider payloads must not reach responses.
     return json(

@@ -1,3 +1,4 @@
+import {secureSession} from './auth-session';
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -761,10 +762,11 @@ test(
     const link = new URL(deliveredLink);
     const signup = await call(link.pathname + link.search, "GET");
     assert.equal(signup.status, 302);
-    const cookie = signup.headers
+    let cookie = signup.headers
       .getSetCookie()
       .map((value) => value.split(";")[0])
       .join("; ");
+    cookie=await secureSession(runtime,cookie);
     const create = await call(
       "/api/projects",
       "POST",
