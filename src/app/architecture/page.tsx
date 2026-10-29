@@ -1,22 +1,12 @@
 import Link from "next/link";
-import { SiteHeader, SiteFooter } from "@/components/marketing/site-shell";
+import { MarketingShell,PageIntro } from "@/components/marketing/site-shell";
 import { TeamAccessGuide } from "@/components/team-access-guide";
 
 export const metadata = { title: "How Patchsentry fits together" };
 export default function Architecture() {
   return (
-    <>
-      <SiteHeader />
-      <main className="container section">
-        <span className="eyebrow">A PRACTICAL CONNECTION GUIDE</span>
-        <h1>
-          One workspace.
-          <br />A runner you control.
-        </h1>
-        <p className="section-description">
-          Patchsentry coordinates QA. The separate QA engine runs it. Your
-          product stays in its own repository.
-        </p>
+    <MarketingShell><PageIntro eyebrow="A PRACTICAL CONNECTION GUIDE" title={<>One workspace.<br/>A runner you control.</>} description="Patchsentry coordinates QA. The separate QA engine runs it. Your product stays in its own repository."/>
+      <div className="container section architecture-guide">
         <div className="docs-content">
           <section>
             <h2>The everyday flow</h2>
@@ -105,8 +95,7 @@ export default function Architecture() {
             </Link>
           </section>
         </div>
-      </main>
-      <SiteFooter />
-    </>
+      </div>
+    </MarketingShell>
   );
 }
