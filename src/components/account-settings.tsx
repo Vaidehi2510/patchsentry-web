@@ -1,4 +1,5 @@
 "use client";
+import {EnterpriseAccess,CompanySignIn} from "./enterprise-access";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { UserRound, ShieldCheck, Globe, KeyRound } from "lucide-react";
@@ -413,6 +414,8 @@ export function AccountSettings({
           .map((p) => (
             <WorkDomain key={p.id} project={p} demo={demo} />
           ))}
+        <CompanySignIn link/>
+        {projects.map(p=><EnterpriseAccess key={p.id} project={p} demo={demo}/>)}
         <p>
           <Link href="/architecture">
             How roles, repositories and the QA runner fit together →
@@ -533,7 +536,7 @@ function WorkDomain({ project, demo }: { project: Project; demo: boolean }) {
             <h3>{domain.restricted ? "Domain restriction active" : "Restrict project access"}</h3>
             <p>When enabled, every member must have a verified email at <strong>@{domain.name}</strong>. Subdomains are separate domains. Membership and roles apply to this project only. Outside accounts cannot open its reports, evidence, exports or weekly summaries, even with an old session.</p>
             <p>QA reports stay in the dashboard. Email and Slack report delivery is blocked, including queued messages. Invitations may still be emailed to matching addresses. Previously downloaded or delivered copies cannot be recalled.</p>
-            <details><summary>SSO and trusted integrations</summary><p>Company sign-in through Microsoft Entra, Google Workspace or another identity provider is a separate SSO integration and is not enabled by DNS verification. Existing project service credentials and approved AI providers remain authorized; review them before adding sensitive product data.</p></details>
+            <details><summary>SSO and trusted integrations</summary><p>Configure Microsoft Entra company sign-in in the separate panel below. DNS verification alone does not enable SSO. Google Workspace and Okta integrations are not included in this Entra connection. Existing project service credentials and approved AI providers remain authorized; review them before adding sensitive product data.</p></details>
             {!domain.restricted && incompatible.length>0 && <div role="status"><strong>Update these members before enabling:</strong><ul>{incompatible.map(m=><li key={m.id}>{m.email}</li>)}</ul><Link href={`/app?project=${project.id}&tab=team`}>Manage project members →</Link><p>The owner must also use a matching verified address. You can change your email in My account.</p></div>}
             <button className="button button-primary" disabled={busy || !isOwner || !domain.verifiedAt || !domain.restricted && incompatible.length>0} onClick={()=>{if(window.confirm(domain.restricted ? "Allow invited external accounts again? Reports still require project membership." : "Restrict this project to @"+domain.name+"? Outside invitations will be revoked and outbound QA reports disabled."))action(domain.restricted?"unrestrict":"restrict");}}>{domain.restricted ? "Turn off domain restriction" : "Require @"+domain.name+" membership"}</button>
             <button

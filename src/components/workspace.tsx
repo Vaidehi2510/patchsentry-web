@@ -1,4 +1,6 @@
 "use client";
+import {DeviceFarm} from "./device-farm";
+import {VisualBaselines} from "./visual-baselines";
 import {AutomationPanel} from './automation-panel';
 import {HostedRepositorySetup} from './hosted-repository-setup';
 import {QualityHub,EvidencePanel} from "./quality-hub";
@@ -481,9 +483,11 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                 <>
                   {tab === "quality" && <QualityHub project={project} runs={runs} demo={demo} navigate={go}/>}
                   {tab === "team" && <TeamOperations key={project.id} project={project} demo={demo} />}
+                  {tab === "team" && <DeviceFarm project={project} demo={demo}/>}
                   {!demo && tab === "overview" && <><section className="notice"><div><strong>Build a durable QA plan for this product.</strong><p>Connect the repository, define requirements, inspect bugs and measure outcomes in one guided workflow.</p><button className="text-button" onClick={()=>go("quality")}>Open Product QA setup →</button></div></section><ProjectSetup project={project} navigate={go} /></>}
                   {tab === 'automation' && <AutomationPanel key={project.id} project={project} demo={demo} navigate={go}/>}
                   {tab === "testing" && <fieldset className="access-controls" disabled={roleRank[project.accessRole || "owner"] < 2}><TestingSetup key={project.id} project={project} demo={demo} onSaved={value => setProjects(items => items.map(p => p.id === value.id ? value : p))} /></fieldset>}
+                  {tab === "testing" && <VisualBaselines project={project} demo={demo}/>}
                   {tab === "overview" && (
                     <>
                       <div className="stat-grid">

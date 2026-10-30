@@ -3,6 +3,8 @@ import { createDatabase, type Database } from "./database";
 import type { CatalogModel } from "../contracts";
 
 export interface Runtime {
+  deviceFarmSend?: (command:unknown)=>Promise<unknown>;
+  ssoFetch?: typeof fetch;
   defer?: (work:()=>Promise<unknown>)=>void;
   hosted?: import("./hosted").HostedAdapter;
   hostedLookup?: typeof import("node:dns/promises").lookup;

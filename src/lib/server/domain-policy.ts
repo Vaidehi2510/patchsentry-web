@@ -11,6 +11,7 @@ export async function restrictedDomain(q: Database['query'], projectId: string) 
   )).rows[0] || null;
 }
 export async function domainAllowsUser(q: Database['query'], projectId: string, userId: string) {
+  if((await q('SELECT d.id FROM qa_directory_users d JOIN "user" u ON lower(u.email)=d.email WHERE d.project_id=$1 AND u.id=$2 AND d.active=false',[projectId,userId])).rows.length)return false;
   const policy = await restrictedDomain(q, projectId);
   if (!policy) return true;
   const user = (await q<{email: string; emailVerified: boolean}>('SELECT email,"emailVerified" FROM "user" WHERE id=$1', [userId])).rows[0];

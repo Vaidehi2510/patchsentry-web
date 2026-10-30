@@ -1,3 +1,4 @@
+import {currentVisualDigest} from './visual-baselines';
 import {restrictedDomain} from './domain-policy';
 import {createHash,createHmac,randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
 import {z} from 'zod';
@@ -22,7 +23,7 @@ async function github(runtime:Runtime,repository:string,suffix:string,token:stri
  const reader=response.body?.getReader();if(!reader)throw new JobError(409,'GitHub returned no verifiable event.');const parts:Buffer[]=[];let n=0;try{for(;;){const p=await reader.read();if(p.done)break;n+=p.value.length;if(n>maximum){await reader.cancel();throw new JobError(413,'GitHub verification exceeded the response limit.');}parts.push(Buffer.from(p.value));}}finally{reader.releaseLock();}return JSON.parse(Buffer.concat(parts).toString());
 }
 export async function automationPolicy(runtime:Runtime,id:string):Promise<AutomationPolicy>{const row=(await runtime.database.query<{payload:unknown}>('SELECT payload FROM qa_automation_settings WHERE project_id=$1',[id])).rows[0];return row?AutomationSettings.parse(row.payload):automationDefaults;}
-async function authority(runtime:Runtime,p:Project){
+export async function authority(runtime:Runtime,p:Project){
  const token=(await providerKey(runtime,p.id,'github')).apiKey,repo=await github(runtime,p.repository,'',token),user=await github(runtime,p.repository,'/user',token);
  if(repo.full_name?.toLowerCase()!==p.repository||!Number.isSafeInteger(repo.id)||!Number.isSafeInteger(user.id)||!/^[A-Za-z0-9-]{1,39}$/.test(user.login||''))throw new JobError(403,'The integration repository or GitHub identity changed.');
  const permission=await github(runtime,p.repository,'/collaborators/'+user.login+'/permission',token);
@@ -108,11 +109,12 @@ export async function automationResult(runtime:Runtime,projectId:string,request:
  const secret=(await providerKey(runtime,projectId,'automation-hook')).apiKey,raw=await rawBody(request),signature=request.headers.get('x-hub-signature-256')||'',expected='sha256='+createHmac('sha256',secret).update(raw).digest('hex');if(!/^sha256=[a-f0-9]{64}$/.test(signature)||!timingSafeEqual(Buffer.from(signature),Buffer.from(expected)))throw new JobError(401,'Invalid result request signature.');
  let parsed;try{parsed=z.object({deliveryId:z.string().regex(/^[A-Za-z0-9_-]{16,100}$/)}).strict().parse(JSON.parse(raw.toString()));}catch{throw new JobError(400,'Provide the accepted CI delivery ID.');}
  const q=runtime.database.query.bind(runtime.database),event=(await q<Event>('SELECT * FROM qa_automation_events WHERE project_id=$1 AND delivery_id=$2',[projectId,parsed.deliveryId])).rows[0];if(!event)throw new JobError(404,'Delivery not found.');
- const job=event.job_id?(await q<{id:string;payload:any;status:string;record_id:string;message:string}>('SELECT id,payload,status,record_id,message FROM qa_jobs WHERE project_id=$1 AND id=$2',[projectId,event.job_id])).rows[0]:null;
+ const job=event.job_id?(await q<{id:string;payload:any;status:string;record_id:string;message:string;hosted_visual_digest:string|null}>('SELECT id,payload,status,record_id,message,hosted_visual_digest FROM qa_jobs WHERE project_id=$1 AND id=$2',[projectId,event.job_id])).rows[0]:null;
  const report=job?.record_id?(await q<{payload:RunInput}>('SELECT payload FROM qa_runs WHERE project_id=$1 AND record_id=$2',[projectId,job.record_id])).rows[0]?.payload:null;
  const reasons:string[]=[];let score=null;
  if(!report||job?.status!=='completed')reasons.push('A completed exact-assessment report is required.');
  else{
+  if(job.payload.testingProfile?.visualRegression&&job.hosted_visual_digest&&job.hosted_visual_digest!==await currentVisualDigest(q,projectId))reasons.push('Approved visual baselines changed after this assessment; request a new run.');
   const current=(await q<{testing_profile:unknown;settings:unknown}>('SELECT testing_profile,settings FROM projects WHERE id=$1',[projectId])).rows[0];
   if(canonical(job.payload.testingProfile)!==canonical(TestingProfileSchema.parse(current.testing_profile||testingDefaults))||canonical(job.payload.unitTests||[])!==canonical(await enabledUnitTests(q,projectId))||canonical(job.payload.settings)!==canonical(current.settings))reasons.push('The saved test or model-review configuration changed after this assessment.');
   score=computeScore(report);if(score.status!=='passed'||!report.checks.some(c=>c.required&&c.method==='automated'))reasons.push('Required executed product checks or findings still need attention.');

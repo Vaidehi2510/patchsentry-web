@@ -1,5 +1,6 @@
 "use client";
 import Link from 'next/link';
+import {CompanySignIn} from './enterprise-access';
 import {useEffect,useState,type FormEvent} from 'react';
 import {ArrowLeft,ArrowRight,Check,ShieldCheck,Mail,LoaderCircle} from 'lucide-react';
 import {BrandMark} from './marketing/site-shell';
@@ -30,5 +31,6 @@ export function AuthForm({mode}:{mode:'login'|'signup'|'reset'}){
  {mode==='login'&&!sent&&<button type="button" className="text-button auth-help" onClick={()=>{setForgot(!forgot);setError('');}}>{forgot?'Back to sign in':'Forgot your password?'}</button>}
  {mode!=='reset'&&!sent&&<p className="auth-switch">{mode==='signup'?'Already have an account?':'First time here?'} <Link href={mode==='signup'?'/login':'/signup'}>{mode==='signup'?'Sign in':'Create an account'}</Link></p>}
  {mode==='login'&&!forgot&&<p className="fineprint">Previously used email links? <Link href="/signup">Request a setup link</Link> if you haven’t chosen a password yet.</p>}
+ {mode==='login'&&!forgot&&!sent&&<CompanySignIn/>}
  {!ready&&<p role="status" className="fineprint">Connecting securely… Signup requires a configured email sender.</p>}<div className="auth-divider"><span>EXPLORE BEFORE YOU CONNECT</span></div><Link href="/demo" className="button button-secondary auth-submit">Try the interactive demo<ArrowRight size={18}/></Link></AuthFrame>;
 }

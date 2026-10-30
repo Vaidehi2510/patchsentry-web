@@ -16,17 +16,20 @@
     "node": "24.x"
   },
   "dependencies": {
+    "@aws-sdk/client-device-farm": "3.1160.0",
+    "@better-auth/core": "1.7.14",
     "@vercel/sandbox": "3.9.1",
-    "better-auth": "1.7.6",
-    "better-call": "1.4.0",
+    "better-auth": "1.7.14",
+    "better-call": "1.4.4",
     "lucide-react": "^0.577.0",
-    "next": "16.3.7",
+    "next": "16.4.3",
     "nodemailer": "10.3.1",
+    "openid-client": "6.8.8",
     "pg": "^8.20.0",
     "qrcode": "^1.5.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "zod": "^4.3.6"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.15",
@@ -36,7 +39,13 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "jose": "6.2.3",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "@vercel/cli-config": {
+      "zod": "$zod"
+    }
   }
 }

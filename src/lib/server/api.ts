@@ -1,3 +1,7 @@
+import {pollDeviceRuns,reconcileDeviceRun,receiveDeviceCi,connectDeviceFarm,deviceFarmState,scheduleDevices,refreshDevices,deviceArtifacts} from './device-farm';
+import {captureVisual,visualState,approveVisual,visualImage} from './visual-baselines';
+import {scimEndpoint,rotateDirectoryToken,syncDirectoryMembership} from './directory';
+import {ssoStatus,configureSso,beginSso,finishSso,ssoAllows,enforceSso} from './enterprise-sso';
 import {automationView,saveAutomation,rotateAutomationSecret,receiveAutomation,dispatchAutomation,automationMaintenance,automationResult} from './automation';
 import {weeklyReports,generateWeeklyReport,deliverWeekly,scheduledWeekly} from './weekly';
 import {cloudSlackStatus,connectCloudSlack,deliverCloudNotifications} from './slack-cloud';
@@ -197,9 +201,11 @@ function sanitize<T>(value: T): T {
 async function userFor(request: Request, runtime: Runtime) {
   const state=await securityState(request,runtime);
   if(state.step!=='complete'||!state.session)throw new ApiError(401,'Complete password sign-in and two-step verification to continue.');
+  await syncDirectoryMembership(runtime.database.query.bind(runtime.database),state.session.user.id);
   return state.session.user;
 }
 async function accessibleProject(
+  request:Request,
   runtime: Runtime,
   id: string,
   ownerId: string,
@@ -209,7 +215,7 @@ async function accessibleProject(
     `SELECT p.*,CASE WHEN p.owner_id=$2 THEN 'owner' ELSE m.role END AS access_role FROM projects p LEFT JOIN qa_members m ON m.project_id=p.id AND m.user_id=$2 WHERE p.id=$1 AND (p.owner_id=$2 OR m.user_id IS NOT NULL)`,
     [id, ownerId],
   );
-  if (!result.rows[0] || !await domainAllowsUser(runtime.database.query.bind(runtime.database),id,ownerId)) throw new ApiError(404, "Project not found.");
+  if (!result.rows[0] || !await ssoAllows(runtime,request,id,ownerId) || !await domainAllowsUser(runtime.database.query.bind(runtime.database),id,ownerId)) throw new ApiError(404, "Project not found.");
   if (roleRank[result.rows[0].access_role || "owner"] < roleRank[minimum]) throw new ApiError(403, "Your project role does not allow this action.");
   return result.rows[0];
 }
@@ -311,21 +317,26 @@ async function dispatch(
       503,
       "Account storage is not configured. Set the database and authentication environment variables.",
     );
+  const deviceCi=/^\/api\/devicefarm\/([a-f0-9-]{36})\/ci$/.exec(path);if(deviceCi&&request.method==='POST')return json(await receiveDeviceCi(runtime,deviceCi[1],request),202);
+  const directoryRoute=/^\/api\/scim\/([a-f0-9-]{36})\/v2(\/.*)$/.exec(path);if(directoryRoute)return scimEndpoint(runtime,request,directoryRoute[1],directoryRoute[2]);
+  if(path==='/api/enterprise/start'&&request.method==='POST'){requireOrigin(request,runtime.config.origin);return beginSso(runtime,request,await readBody(request));}
+  if(path==='/api/enterprise/callback'&&request.method==='GET')return finishSso(runtime,request);
   const eventEndpoint=/^\/api\/automation\/([a-f0-9-]{36})\/(github|ci|result)$/.exec(path);
   if(eventEndpoint&&request.method==='POST'){if(eventEndpoint[2]==='result')return json(await automationResult(runtime,eventEndpoint[1],request));const result=await receiveAutomation(runtime,eventEndpoint[1],eventEndpoint[2] as 'github'|'ci',request);(runtime.defer||after)(async()=>{await dispatchAutomation(runtime,eventEndpoint[1]);await deliverCloudNotifications(runtime,eventEndpoint[1]);});return json(result,202);}
-  const hostedResult=/^\/api\/internal\/hosted\/([a-f0-9-]{36})(?:\/(stop|evidence)(?:\/([a-f0-9-]{36}))?)?$/.exec(path);
+  const hostedResult=/^\/api\/internal\/hosted\/([a-f0-9-]{36})(?:\/(stop|evidence|visual)(?:\/([a-f0-9-]{36}))?)?$/.exec(path);
   if(hostedResult&&request.method==='POST'){
     if(!hostedResult[2]){const result=await completeHosted(runtime,hostedResult[1],request,sanitize(await readBody(request)));const p=(await runtime.database.query<{project_id:string}>('SELECT project_id FROM qa_jobs WHERE id=$1',[hostedResult[1]])).rows[0];if(p)(runtime.defer||after)(()=>deliverCloudNotifications(runtime,p.project_id));return json(result);}
     const capability=request.headers.get('authorization')?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1];
     const row=capability?(await runtime.database.query<{project_id:string;record_id:string;status:string}>("SELECT project_id,record_id,status FROM qa_jobs WHERE id=$1 AND callback_hash=$2 AND hosted_expires_at>now() AND execution_mode='hosted'",[hostedResult[1],createHash('sha256').update(capability).digest('hex')])).rows[0]:null;
     if(!row)throw new ApiError(403,'Invalid or expired job capability.');
+    if(hostedResult[2]==='visual'&&row.status==='completed')return json(await captureVisual(runtime,row.project_id,row.record_id,request));
     if(hostedResult[2]==='evidence'&&hostedResult[3]&&row.status==='completed')return json(await uploadEvidence(runtime,row.project_id,row.record_id,hostedResult[3],request));
     if(hostedResult[2]==='stop'&&['completed','blocked','failed','cancelled'].includes(row.status)){(runtime.defer||after)(()=>stopHosted(runtime,row.project_id,hostedResult[1]));return json({ok:true});}
     throw new ApiError(409,'This hosted job cannot accept that action.');
   }
   if(path==='/api/internal/hosted-check'&&request.method==='POST')return json(await verifyHostedInfrastructure(request,runtime));
   if(path==='/api/internal/weekly'&&request.method==='GET'){operatorAuthentication(request,runtime);(runtime.defer||after)(async()=>{await scheduledWeekly(runtime);const rows=(await runtime.database.query<{project_id:string}>("SELECT DISTINCT project_id FROM qa_notifications WHERE status='pending' ORDER BY project_id LIMIT 20")).rows;for(const row of rows)await deliverCloudNotifications(runtime,row.project_id);});return json({accepted:true});}
-  if(path==='/api/internal/maintenance' &&request.method==='GET'){const result=await maintenance(request,runtime);(runtime.defer||after)(()=>automationMaintenance(runtime));return json(result);}
+  if(path==='/api/internal/maintenance' &&request.method==='GET'){const result=await maintenance(request,runtime);(runtime.defer||after)(async()=>{await automationMaintenance(runtime);await pollDeviceRuns(runtime);});return json(result);}
   if(path.startsWith('/api/account')){if(request.method!=='GET')requireOrigin(request,runtime.config.origin);return accountEndpoint(request,runtime,request.method==='GET'?undefined:await readBody(request));}
   if(path.startsWith('/api/security/')){if(request.method!=='GET')requireOrigin(request,runtime.config.origin);return securityEndpoint(request,runtime,request.method==='POST'?await readBody(request):undefined);}
   if (path.startsWith("/api/auth/")) {
@@ -448,18 +459,18 @@ async function dispatch(
   const user = await userFor(request, runtime);
 
   const automated=/^\/api\/projects\/([a-f0-9-]{36})\/(automation|weekly-reports|cloud-slack)(?:\/(secret|generate|disconnect))?$/.exec(path);
-  if(automated){const p=await accessibleProject(runtime,automated[1],user.id,request.method==='GET'?'viewer':automated[3]==='secret'?'owner':'admin');const area=automated[2],action=automated[3];
+  if(automated){const p=await accessibleProject(request,runtime,automated[1],user.id,request.method==='GET'?'viewer':automated[3]==='secret'?'owner':'admin');const area=automated[2],action=automated[3];
    if(area==='automation'){if(request.method==='GET')return json(await automationView(runtime,p.id));if(request.method==='PATCH')return json(await saveAutomation(runtime,p,await readBody(request),user.name));if(request.method==='POST'&&action==='secret')return json(await rotateAutomationSecret(runtime,p.id,user.name));}
    if(area==='weekly-reports'){if(request.method==='GET')return json(await weeklyReports(runtime,p.id));if(request.method==='POST'&&action==='generate'){const report=await generateWeeklyReport(runtime,p.id);return json({report});}}
    if(area==='cloud-slack'){if(request.method==='GET')return json(await cloudSlackStatus(runtime,p.id));if(request.method==='POST')return json(await connectCloudSlack(runtime,p.id,await readBody(request),user.name));if(request.method==='DELETE'){await runtime.database.query("DELETE FROM qa_provider_credentials WHERE project_id=$1 AND provider='slack'",[p.id]);return json({removed:true});}}
    throw new ApiError(405,'Method not allowed.');
   }
   const repositorySetup=/^\/api\/projects\/([a-f0-9-]{36})\/repository-connection$/.exec(path);
-  if(repositorySetup){const p=await accessibleProject(runtime,repositorySetup[1],user.id,request.method==='GET'?'viewer':'admin');if(request.method==='GET')return json(await repositoryConnection(runtime,p.id));if(request.method==='POST')return json(await connectRepository(runtime,p.id,p.repository,await readBody(request),user.name));if(request.method==='DELETE')return json(await disconnectRepository(runtime,p.id,user.name));throw new ApiError(405,'Method not allowed.');}
+  if(repositorySetup){const p=await accessibleProject(request,runtime,repositorySetup[1],user.id,request.method==='GET'?'viewer':'admin');if(request.method==='GET')return json(await repositoryConnection(runtime,p.id));if(request.method==='POST')return json(await connectRepository(runtime,p.id,p.repository,await readBody(request),user.name));if(request.method==='DELETE')return json(await disconnectRepository(runtime,p.id,user.name));throw new ApiError(405,'Method not allowed.');}
   const provider=/^\/api\/projects\/([a-f0-9-]{36})\/provider\/openrouter(?:\/(probe))?$/.exec(path);
-  if(provider){const p=await accessibleProject(runtime,provider[1],user.id,request.method==='GET'?'viewer':'admin');if(request.method==='GET')return json(await providerStatus(runtime,p.id));if(request.method==='POST')return json(provider[2]?await probeProvider(runtime,p.id,await readBody(request)):await connectProvider(runtime,p.id,await readBody(request),user.name));if(request.method==='DELETE'&&!provider[2])return json(await removeProvider(runtime,p.id,user.name));throw new ApiError(405,'Method not allowed.');}
+  if(provider){const p=await accessibleProject(request,runtime,provider[1],user.id,request.method==='GET'?'viewer':'admin');if(request.method==='GET')return json(await providerStatus(runtime,p.id));if(request.method==='POST')return json(provider[2]?await probeProvider(runtime,p.id,await readBody(request)):await connectProvider(runtime,p.id,await readBody(request),user.name));if(request.method==='DELETE'&&!provider[2])return json(await removeProvider(runtime,p.id,user.name));throw new ApiError(405,'Method not allowed.');}
   const quality=/^\/api\/projects\/([a-f0-9-]{36})\/(quality|requirements|bugs|metrics|quality-policy|repository-authorization|evidence|audit-export|retention)(?:\/([a-f0-9-]{36}|brief|export))?$/.exec(path);
-  if(quality){const area=quality[2],id=quality[3],project=await accessibleProject(runtime,quality[1],user.id,request.method==='GET'?'viewer':['quality-policy','repository-authorization','retention'].includes(area)?'owner':'qa');
+  if(quality){const area=quality[2],id=quality[3],project=await accessibleProject(request,runtime,quality[1],user.id,request.method==='GET'?'viewer':['quality-policy','repository-authorization','retention'].includes(area)?'owner':'qa');
     if(area==='quality'&&request.method==='GET')return json(await qualityView(runtime.database,project.id));
     if(area==='quality'&&id==='brief'&&request.method==='PATCH')return json(await saveBrief(runtime.database,project.id,sanitize(await readBody(request)),user.name));
     if(area==='requirements'&&['POST','PATCH'].includes(request.method))return json(await saveRequirement(runtime.database,project.id,id,sanitize(await readBody(request)),user.name),id?200:201);
@@ -477,10 +488,32 @@ async function dispatch(
     throw new ApiError(405,'Method not allowed.');
   }
   const attachments=/^\/api\/projects\/([a-f0-9-]{36})\/runs\/([a-f0-9]{64})\/evidence$/.exec(path);
-  if(attachments&&request.method==='GET'){const p=await accessibleProject(runtime,attachments[1],user.id);return json(await evidenceList(runtime,p.id,attachments[2]));}
+  if(attachments&&request.method==='GET'){const p=await accessibleProject(request,runtime,attachments[1],user.id);return json(await evidenceList(runtime,p.id,attachments[2]));}
+  const device=/^\/api\/projects\/([a-f0-9-]{36})\/device-farm(?:\/(runs)(?:\/([a-f0-9-]{36})(?:\/(stop|artifacts))?)?)?$/.exec(path);
+  if(device){const p=await accessibleProject(request,runtime,device[1],user.id,request.method==='GET'?'viewer':device[2]?'qa':'owner');
+    if(request.method==='GET')return device[4]==='artifacts'&&device[3]?json(await deviceArtifacts(runtime,p.id,device[3])):device[3]?json(await refreshDevices(runtime,p.id,device[3])):json(await deviceFarmState(runtime,p.id));
+    if(request.method==='PATCH'&&device[3])return json(await reconcileDeviceRun(runtime,p.id,device[3],await readBody(request)));
+    if(request.method==='POST'&&!device[2]){const state=await securityState(request,runtime);if(!state.proof?.mfa_verified_at||Date.now()-Date.parse(state.proof.mfa_verified_at)>15*60000)throw new ApiError(403,'Verify MFA before connecting paid device infrastructure.');await connectDeviceFarm(runtime,p.id,await readBody(request),user.name);return json(await deviceFarmState(runtime,p.id));}
+    if(request.method==='POST'&&device[2])return json(device[3]?await refreshDevices(runtime,p.id,device[3],device[4]==='stop'):await scheduleDevices(runtime,p.id,await readBody(request),user.name));throw new ApiError(405,'Method not allowed.');
+  }
+  const visual=/^\/api\/projects\/([a-f0-9-]{36})\/visual-baselines(?:\/([a-f0-9]{64}))?$/.exec(path);
+  if(visual){const p=await accessibleProject(request,runtime,visual[1],user.id,request.method==='GET'?'viewer':'admin');
+    if(request.method==='GET')return visual[2]?visualImage(runtime,p.id,visual[2]):json(await visualState(runtime,p.id));
+    if(request.method==='POST'){const state=await securityState(request,runtime);if(!state.proof?.mfa_verified_at||Date.now()-Date.parse(state.proof.mfa_verified_at)>15*60000)throw new ApiError(403,'Verify MFA for account changes before accepting a visual baseline.');return json(await approveVisual(runtime,p.id,await readBody(request),user.name));}
+    if(request.method==='DELETE'&&visual[2]){if(url.searchParams.get('accepted')==='true'){const state=await securityState(request,runtime);if(!state.proof?.mfa_verified_at||Date.now()-Date.parse(state.proof.mfa_verified_at)>15*60000)throw new ApiError(403,'Verify MFA before removing an accepted visual baseline.');await runtime.database.query('DELETE FROM qa_visual_baselines WHERE project_id=$1 AND key=$2',[p.id,visual[2]]);await audit(runtime.database.query.bind(runtime.database),p.id,user.name,'visual.baseline_removed',visual[2]);}else{await runtime.database.query('DELETE FROM qa_visual_candidates WHERE project_id=$1 AND id=$2',[p.id,visual[2]]);await audit(runtime.database.query.bind(runtime.database),p.id,user.name,'visual.candidate_removed',visual[2]);}return json({removed:true});}throw new ApiError(405,'Method not allowed.');
+  }
+  const enterprise=/^\/api\/projects\/([a-f0-9-]{36})\/sso(?:\/(directory-token))?$/.exec(path);
+  if(enterprise){const p=await accessibleProject(request,runtime,enterprise[1],user.id,request.method==='GET'?'viewer':'owner');
+    if(request.method==='GET')return json(await ssoStatus(runtime,p.id,user.id));
+    const state=await securityState(request,runtime);if(!state.proof?.mfa_verified_at||Date.now()-Date.parse(state.proof.mfa_verified_at)>15*60000)throw new ApiError(403,'Verify MFA for account changes before changing company sign-in.');
+    if(request.method==='POST'&&enterprise[2]==='directory-token')return json(await rotateDirectoryToken(runtime,p.id,user.name));
+    if(request.method==='POST'){await configureSso(runtime,p.id,await readBody(request),user.name);return json(await ssoStatus(runtime,p.id,user.id));}
+    if(request.method==='PATCH'){const input=parse(z.object({enforced:z.boolean()}).strict(),await readBody(request));await enforceSso(runtime,p.id,request,input.enforced,user.name);return json(await ssoStatus(runtime,p.id,user.id));}
+    throw new ApiError(405,'Method not allowed.');
+  }
   const domainMatch=/^\/api\/projects\/([a-f0-9-]{36})\/domain(?:\/(verify))?$/.exec(path);
   if(domainMatch){
-    const p=await accessibleProject(runtime,domainMatch[1],user.id,request.method==='GET'?'admin':'owner');
+    const p=await accessibleProject(request,runtime,domainMatch[1],user.id,request.method==='GET'?'admin':'owner');
     if(request.method==='GET'&&!domainMatch[2])return json(await domainReadiness(runtime,p.id));
     const security=await securityState(request,runtime);
     if(!security.proof?.mfa_verified_at || Date.now()-Date.parse(security.proof.mfa_verified_at)>15*60000)throw new ApiError(403,'Verify MFA for account changes before changing the domain policy.');
@@ -489,13 +522,13 @@ async function dispatch(
     if(request.method==='DELETE'&&!domainMatch[2]){if(await restrictedDomain(runtime.database.query.bind(runtime.database),p.id))throw new ApiError(409,'Turn off domain restrictions before removing this domain.');const removed=await runtime.database.query('DELETE FROM qa_work_domains WHERE project_id=$1 AND restricted=false RETURNING project_id',[p.id]);if(!removed.rows.length)throw new ApiError(409,'Domain changed; reload before removing it.');await audit(runtime.database.query.bind(runtime.database),p.id,user.name,'domain.removed','Domain association removed.');return json({removed:true});}throw new ApiError(405,'Method not allowed.');
   }
   const modelSetup=/^\/api\/projects\/([a-f0-9-]{36})\/model-connections$/.exec(path);
-  if(modelSetup){const project=await accessibleProject(runtime,modelSetup[1],user.id,request.method==='GET'?'viewer':'admin');if(request.method==='GET')return json(await modelConnections(runtime,project.id));if(request.method==='POST')return json(await requestModelSetup(runtime,project.id,await readBody(request)),201);throw new ApiError(405,'Method not allowed.');}
+  if(modelSetup){const project=await accessibleProject(request,runtime,modelSetup[1],user.id,request.method==='GET'?'viewer':'admin');if(request.method==='GET')return json(await modelConnections(runtime,project.id));if(request.method==='POST')return json(await requestModelSetup(runtime,project.id,await readBody(request)),201);throw new ApiError(405,'Method not allowed.');}
   if(path==='/api/invitations/preview'&&request.method==='POST'){const input=parse(z.object({token:z.string().regex(/^[A-Za-z0-9_-]{43}$/)}).strict(),await readBody(request));const row=(await runtime.database.query('SELECT p.id,p.name,i.role,i.email FROM qa_invites i JOIN projects p ON p.id=i.project_id WHERE i.token_hash=$1 AND i.expires_at>now() AND lower(i.email)=lower($2)',[hashToken(input.token),user.email])).rows[0];if(!row)throw new ApiError(404,'This invitation is unavailable for your verified email. Sign in with the invited address or ask for a new invitation.');await requireDomainEmail(runtime.database.query.bind(runtime.database),String(row.id),user.email);return json({invitation:row});}
   if (path === "/api/invitations/accept" && request.method === "POST") return json(await acceptInvite(runtime.database,user,await readBody(request)));
   const teamMatch = /^\/api\/projects\/([a-f0-9-]{36})\/(team|activity|fleet|slack)(?:\/([A-Za-z0-9_-]{1,100}))?$/.exec(path);
   if (teamMatch) {
     const area=teamMatch[2], action=teamMatch[3];
-    const project=await accessibleProject(runtime,teamMatch[1],user.id,request.method==='GET' ? 'viewer' : 'admin');
+    const project=await accessibleProject(request,runtime,teamMatch[1],user.id,request.method==='GET' ? 'viewer' : 'admin');
     const role=project.access_role || 'owner';
     if(area==='team' && request.method==='GET') return json({domainPolicy:await restrictedDomain(runtime.database.query.bind(runtime.database),project.id),members:await members(runtime.database,project.id),role,pending:(await runtime.database.query("SELECT 'invite-'||token_hash AS id,email,role,expires_at,delivery_status FROM qa_invites WHERE project_id=$1 AND expires_at>now() ORDER BY email",[project.id])).rows});
     if(area==='team' && !action && request.method==='POST') {await rate(runtime,'invitation:'+project.id,10);const invitation=await invite(runtime.database,project.id,user.name,role,await readBody(request));let delivery='unavailable';if(runtime.config.sendInvitation){try{await runtime.config.sendInvitation({email:invitation.email,url:runtime.config.origin+'/invite#token='+invitation.token,projectName:project.name,inviter:user.name,role:invitation.role});delivery='accepted';}catch{delivery='unconfirmed';}}await runtime.database.query('UPDATE qa_invites SET delivery_status=$3 WHERE project_id=$1 AND token_hash=$2',[project.id,hashToken(invitation.token),delivery]);return json({...invitation,delivery},201);}
@@ -517,7 +550,7 @@ async function dispatch(
         `SELECT p.*,CASE WHEN p.owner_id=$1 THEN 'owner' ELSE m.role END AS access_role FROM projects p LEFT JOIN qa_members m ON m.project_id=p.id AND m.user_id=$1 WHERE p.owner_id=$1 OR m.user_id IS NOT NULL ORDER BY p.created_at DESC`,
         [user.id],
       );
-      const allowed=[];for(const p of result.rows)if(await domainAllowsUser(runtime.database.query.bind(runtime.database),p.id,user.id))allowed.push(p);
+      const allowed=[];for(const p of result.rows)if(await domainAllowsUser(runtime.database.query.bind(runtime.database),p.id,user.id)&&await ssoAllows(runtime,request,p.id,user.id))allowed.push(p);
       return json({ projects: allowed.map(projectView) });
     }
     if (request.method === "POST") {
@@ -555,7 +588,7 @@ async function dispatch(
   }
   const jobMatch = /^\/api\/projects\/([a-f0-9-]{36})\/jobs(?:\/([a-f0-9-]{36})\/(retry|cancel))?$/.exec(path);
   if (jobMatch) {
-    const project = await accessibleProject(runtime, jobMatch[1], user.id, request.method === "GET" ? "viewer" : "qa");
+    const project = await accessibleProject(request,runtime, jobMatch[1], user.id, request.method === "GET" ? "viewer" : "qa");
     if (!jobMatch[2] && request.method === "GET") return json({ jobs: await listJobs(runtime.database, project.id) });
     if (!jobMatch[2] && request.method === "POST") { const result=await createJob(runtime.database, project, await readBody(request), user.name); if(project.execution_mode==='hosted'&&project.settings.backend==='openrouter'&&result.job.status==='queued')(runtime.defer||after)(()=>startHosted(runtime,project.id,result.job.id));return json(result,201); }
     if (jobMatch[2] && request.method === "POST") {const job=await changeJob(runtime.database, project, jobMatch[2], jobMatch[3] as "retry" | "cancel", user.name);if(jobMatch[3]==='cancel'&&project.execution_mode==='hosted')(runtime.defer||after)(()=>stopHosted(runtime,project.id,job.id));return json({job});}
@@ -563,7 +596,7 @@ async function dispatch(
   }
   const testsMatch = /^\/api\/projects\/([a-f0-9-]{36})\/tests(?:\/([a-f0-9-]{36}))?$/.exec(path);
   if (testsMatch) {
-    const project = await accessibleProject(runtime, testsMatch[1], user.id, request.method === "GET" ? "viewer" : "qa");
+    const project = await accessibleProject(request,runtime, testsMatch[1], user.id, request.method === "GET" ? "viewer" : "qa");
     if (!testsMatch[2] && request.method === "GET") return json({ tests: await listTestCases(runtime.database, project.id) });
     if (!testsMatch[2] && request.method === "POST") { const test=await saveTestCase(runtime.database, project.id, await readBody(request)); await audit(runtime.database.query.bind(runtime.database),project.id,user.name,"test.created",test.name); return json({test},201); }
     if (testsMatch[2] && request.method === "PATCH") { const test=await saveTestCase(runtime.database, project.id, await readBody(request), testsMatch[2]); await audit(runtime.database.query.bind(runtime.database),project.id,user.name,"test.updated",`${test.name} · v${test.version}`); return json({test}); }
@@ -572,7 +605,7 @@ async function dispatch(
   }
   const projectMatch = /^\/api\/projects\/([a-f0-9-]{36})(?:\/(token|runs))?$/.exec(path);
   if (projectMatch) {
-    const project = await accessibleProject(runtime, projectMatch[1], user.id, request.method === "GET" ? "viewer" : projectMatch[2] === "token" || request.method === "DELETE" ? "owner" : "admin");
+    const project = await accessibleProject(request,runtime, projectMatch[1], user.id, request.method === "GET" ? "viewer" : projectMatch[2] === "token" || request.method === "DELETE" ? "owner" : "admin");
     if (projectMatch[2] === "token" && request.method === "POST") {
       if((await policyFor(runtime.database.query.bind(runtime.database),project.id)).requireRepoVerification&&!await repositoryProof(runtime,project.id))throw new ApiError(403,'Verify repository authorization before issuing a runner token.');
       const token = "pst_" + randomBytes(32).toString("base64url");

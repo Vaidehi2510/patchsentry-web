@@ -74,7 +74,7 @@ export default function Architecture() {
           <section>
             <h2>Company domains and private spaces</h2>
             <p>
-              In My account, project owners can prove domain control using a DNS TXT record, then require matching verified email addresses for every project member. An invitation and a project role are still required; people at the same company cannot see other projects automatically. Restrictions cover reports, evidence, exports and weekly summaries, including existing sessions. Report delivery to email and Slack is blocked while this policy is active. Previously shared copies cannot be recalled. Domain verification does not enable identity-provider SSO, automatic joining, a custom hostname, or access to GitHub secrets. Project service credentials and approved AI providers remain separate trusted integrations.
+              In My account, project owners can prove domain control using a DNS TXT record, then require matching verified email addresses for every project member. An invitation and a project role are still required; people at the same company cannot see other projects automatically. Restrictions cover reports, evidence, exports and weekly summaries, including existing sessions. Report delivery to email and Slack is blocked while this policy is active. Previously shared copies cannot be recalled. Domain verification does not enable identity-provider SSO, automatic joining, a custom hostname, or access to GitHub secrets. Microsoft Entra sign-in and SCIM User provisioning can be configured separately in My account. Project service credentials and approved AI providers remain separate trusted integrations.
             </p>
           </section>
           <section>

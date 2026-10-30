@@ -14,10 +14,10 @@ const scenarios = {
   team: {
     title: "A clearer handoff. A calmer release.",
     text: "Review your team's changes, builds and complete versions with repeatable checks and findings tied to each artifact. Bring the results into your existing pull-request workflow.",
-    bullets: ["Connect an organization repository through your runner", "Choose hosted or local models for the project", "Keep a QA expert involved where judgment matters"],
+    bullets: ["Connect read-only GitHub access in your workspace", "Choose hosted or local models for the project", "Keep a QA expert involved where judgment matters"],
     project: "Our next product release", branch: "feature/checkout-update", icon: Users,
     checks: ["Review the complete candidate build", "Replay the regression journeys", "Check the release gate before deployment"],
-    note: "Project access is managed by its account owner; team invitations are not yet available.",
+    note: "Project owners invite teammates and assign roles. Verified company domains and Microsoft Entra sign-in can restrict product access.",
   },
 };
 export function UseCases() {

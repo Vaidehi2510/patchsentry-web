@@ -1,3 +1,4 @@
+import {migrateEnterprise} from "./enterprise-schema";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
 import { magicLink, twoFactor } from "better-auth/plugins";
@@ -169,6 +170,7 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
   await database.query("CREATE TABLE IF NOT EXISTS qa_trusted_devices (id text PRIMARY KEY,user_id text NOT NULL REFERENCES \"user\"(id) ON DELETE CASCADE,agent_hash text NOT NULL,label text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),expires_at timestamptz NOT NULL)");
   await database.query("CREATE TABLE IF NOT EXISTS qa_work_domains (project_id text PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,domain text NOT NULL,challenge text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),verified_at timestamptz)");
   await database.query("ALTER TABLE qa_work_domains ADD COLUMN IF NOT EXISTS restricted boolean NOT NULL DEFAULT false");
+  await migrateEnterprise(database);
   // Enforce even for an email-change confirmation issued before policy activation.
   await database.query(`CREATE OR REPLACE FUNCTION qa_guard_owner_domain() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
     IF NEW.email IS DISTINCT FROM OLD.email AND EXISTS (SELECT 1 FROM projects p JOIN qa_work_domains d ON d.project_id=p.id WHERE p.owner_id=OLD.id AND d.restricted=true AND split_part(lower(NEW.email),'@',2)<>d.domain) THEN

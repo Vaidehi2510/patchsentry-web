@@ -1,3 +1,5 @@
+import {currentVisualDigest,hostedBaselines} from './visual-baselines';
+import {executeHostedUnits,type HostedUnitResult} from './hosted-unit';
 import { createHash, randomBytes } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
@@ -34,6 +36,7 @@ export interface HostedSandbox {
   name:string;
   writeFiles(files:{path:string;content:Buffer}[]):Promise<unknown>;
   runCommand(args:{cmd:string;args:string[];cwd?:string;detached?:boolean;timeoutMs?:number}):Promise<unknown>;
+  updateNetworkPolicy?(policy:"deny-all"):Promise<unknown>;
   stop():Promise<unknown>;
 }
 export interface HostedAdapter {
@@ -62,14 +65,18 @@ export async function startHosted(runtime:Runtime,projectId:string,jobId:string)
     const hasRepositoryKey=(await q("SELECT project_id FROM qa_provider_credentials WHERE project_id=$1 AND provider='github'",[projectId])).rows.length>0;
     const gitHubToken=hasRepositoryKey?(await providerKey(runtime,projectId,'github')).apiKey:undefined;
     const callback=randomBytes(32).toString('base64url');
+    const unitResult=await executeHostedUnits(runtime,adapter,row.id,projectId,row.payload);
+    if(unitResult)await q('UPDATE qa_jobs SET hosted_unit_result=$2::jsonb WHERE id=$1',[row.id,JSON.stringify(unitResult)]);
     sandbox=await adapter.create(preview.hostname,artifactHost);
     const registered=await q("UPDATE qa_jobs SET sandbox_id=$3,callback_hash=$4,hosted_expires_at=now()+interval '15 minutes',message='Hosted worker preparing browsers and reading the requested source revision.',updated_at=now() WHERE project_id=$1 AND id=$2 AND status='running' RETURNING id",[projectId,jobId,sandbox.name,hash(callback)]);
     if(!registered.rows.length){await sandbox.stop();return;}
+    const visualBaselines=row.payload.testingProfile.visualRegression?await hostedBaselines(runtime,projectId):[];
+    if(row.payload.testingProfile.visualRegression)await q('UPDATE qa_jobs SET hosted_visual_digest=$2 WHERE id=$1',[row.id,hash(JSON.stringify(visualBaselines.map(b=>[b.record.key,b.record.sha256]).sort((a,b)=>a[0].localeCompare(b[0]))))]);
     // Keys and job capabilities are private files, never command arguments, logs or product files.
     const worker=await readFile(join(process.cwd(),'scripts/hosted-worker.cjs'));
     const engineRevision=(await readFile(join(process.cwd(),'scripts/hosted-engine-revision.txt'),'utf8')).trim();
     if(!/^[a-f0-9]{40}$/.test(engineRevision))throw new Error('Unpinned engine');
-    await sandbox.writeFiles([{path:'/vercel/sandbox/hosted-artifact.cjs',content:await readFile(join(process.cwd(),'scripts/hosted-artifact.cjs'))},{path:'/vercel/sandbox/hosted-system.cjs',content:await readFile(join(process.cwd(),'scripts/hosted-system.cjs'))},{path:'/vercel/sandbox/patchsentry-worker.cjs',content:worker},{path:'/vercel/sandbox/qa-input.json',content:Buffer.from(JSON.stringify({job:row.payload,apiKey:credential.apiKey,gitHubToken,callbackToken:callback,callbackUrl:runtime.config.origin+'/api/internal/hosted/'+row.id,engineRevision,allowEvidenceUploads:policy.allowEvidenceUploads}))}]);
+    await sandbox.writeFiles([{path:'/vercel/sandbox/hosted-artifact.cjs',content:await readFile(join(process.cwd(),'scripts/hosted-artifact.cjs'))},{path:'/vercel/sandbox/hosted-system.cjs',content:await readFile(join(process.cwd(),'scripts/hosted-system.cjs'))},{path:'/vercel/sandbox/patchsentry-worker.cjs',content:worker},{path:'/vercel/sandbox/qa-input.json',content:Buffer.from(JSON.stringify({job:row.payload,apiKey:credential.apiKey,gitHubToken,callbackToken:callback,callbackUrl:runtime.config.origin+'/api/internal/hosted/'+row.id,engineRevision,allowEvidenceUploads:policy.allowEvidenceUploads,visualBaselines}))}]);
     await sandbox.runCommand({cmd:'node',args:['/vercel/sandbox/patchsentry-worker.cjs'],cwd:'/vercel/sandbox',detached:true,timeoutMs:14*60_000});
     // If cancellation raced with start, stop the VM after launching as well.
     if(!(await q("SELECT id FROM qa_jobs WHERE id=$1 AND project_id=$2 AND status='running'",[jobId,projectId])).rows.length)await sandbox.stop();
@@ -89,11 +96,13 @@ export async function completeHosted(runtime:Runtime,jobId:string,request:Reques
   try{await client.query('BEGIN');const row=(await client.query<HostedRow>("SELECT * FROM qa_jobs WHERE id=$1 AND execution_mode='hosted' FOR UPDATE",[jobId])).rows[0];if(!row||row.callback_hash!==hash(token))throw new JobError(403,'Invalid job capability.');projectId=row.project_id;
     if(row.status==='completed'){await client.query('COMMIT');return {ok:true,duplicate:true};}
     if(row.status!=='running'||!row.hosted_expires_at||Date.parse(row.hosted_expires_at)<Date.now())throw new JobError(409,'Hosted job expired or was cancelled.');
-    const result=input.data,report=result.report;
+    const result=input.data,report=result.report;let unitDurationMs=0;
+    if(report&&row.payload.unitTests?.length){const units=(await client.query<{hosted_unit_result:HostedUnitResult|null}>("SELECT hosted_unit_result FROM qa_jobs WHERE id=$1",[jobId])).rows[0].hosted_unit_result;if(!units)throw new JobError(409,"Authored unit-test evidence is missing.");unitDurationMs=units.durationMs||0;report.checks=report.checks.filter(c=>!c.id.startsWith("runner-patchsentry-authored-unit-tests"));report.checks.push({id:"runner-patchsentry-authored-unit-tests",name:"Hosted authored Node unit tests",method:"automated",required:true,status:units.status,details:units.details});if(row.payload.qualityPlan){for(const req of row.payload.qualityPlan.requirements){const check=report.checks.find(c=>c.id==='requirement-'+req.id);if(!check)continue;const ids=[...new Set([...req.checkIds,...req.goalIds.flatMap(id=>['goal-'+id,'replay-'+id])])],actual=ids.map(id=>report.checks.find(c=>c.id===id));check.status=actual.some(c=>c?.status==='failed'||c?.status==='execution_error')?'failed':ids.length&&actual.every(c=>c?.method==='automated'&&c.status==='passed')?'passed':'blocked';}}}
+    if(report&&row.payload.testingProfile.visualRegression){const saved=(await client.query<{hosted_visual_digest:string}>('SELECT hosted_visual_digest FROM qa_jobs WHERE id=$1',[jobId])).rows[0]?.hosted_visual_digest;report.checks.push({id:'hosted-visual-baseline-stability',name:'Approved visual baseline stability',method:'automated',required:true,status:saved===await currentVisualDigest(client.query.bind(client),projectId)?'passed':'blocked',details:'The approved project visual baselines must remain unchanged during this assessment.'});}
     if(result.status==='completed'&&(!report||!jobReportMatches(row.payload,report)||report.recordId!==hash(`portal:${row.id}:${row.payload.repository}:${row.payload.revision}`)))throw new JobError(409,'Hosted report does not match this exact job and revision.');
     if(report&&result.status==='completed'){
       await client.query('INSERT INTO qa_runs (project_id,record_id,payload) VALUES ($1,$2,$3::jsonb)',[projectId,report.recordId,JSON.stringify({...report,score:computeScore(report),receivedAt:new Date().toISOString()})]);
-      await client.query('INSERT INTO qa_usage (project_id,record_id,payload) VALUES ($1,$2,$3::jsonb)',[projectId,report.recordId,JSON.stringify({durationMs:result.durationMs,inferenceUsd:report.ai.costUsd,infrastructureUsd:null,humanMinutes:null,costIsEstimate:report.ai.costIsEstimate,jobId})]);
+      await client.query('INSERT INTO qa_usage (project_id,record_id,payload) VALUES ($1,$2,$3::jsonb)',[projectId,report.recordId,JSON.stringify({durationMs:result.durationMs+unitDurationMs,unitDurationMs,inferenceUsd:report.ai.costUsd,infrastructureUsd:null,humanMinutes:null,costIsEstimate:report.ai.costIsEstimate,jobId})]);
     }
     await client.query("UPDATE qa_jobs SET status=$2,record_id=$3,message=$4,lease_expires_at=NULL,updated_at=now() WHERE id=$1",[jobId,result.status,result.status==='completed'?report!.recordId:null,result.message]);
     const q=client.query.bind(client);await audit(q,projectId,'Hosted worker','qa.'+result.status,jobId);await queueNotification(q,projectId,result.status==='completed'?'completed':'blocked',jobId+':hosted-complete',{repository:row.payload.repository,revision:row.payload.revision,target:row.payload.target,pr:row.payload.pr,requestedBy:row.payload.requestedBy,jobId,...(report?resultSummary(report):{}),message:result.message});
