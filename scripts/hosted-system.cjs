@@ -13,6 +13,7 @@ module.exports=function prepareHostedSystem(){
     else root(['mv',filename,filename+'.qa-disabled']);
   }
   if(fs.existsSync('/etc/apt/sources.list')){const content=fs.readFileSync('/etc/apt/sources.list','utf8');root(['tee','/etc/apt/sources.list'],{input:content.replaceAll('http://','https://')});}
+  root(['tee','/etc/apt/apt.conf.d/99patchsentry-network'],{input:'Acquire::Retries "3";\nAcquire::https::Pipeline-Depth "0";\nAcquire::http::Pipeline-Depth "0";\n'});
   // Keep Chromium's own namespace sandbox enabled inside the isolated VM.
   if(fs.existsSync('/proc/sys/kernel/apparmor_restrict_unprivileged_userns'))root(['sysctl','-w','kernel.apparmor_restrict_unprivileged_userns=0']);
 };
