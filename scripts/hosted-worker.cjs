@@ -16,6 +16,8 @@ async function main(){
   input=JSON.parse(await fs.readFile(root+'/qa-input.json','utf8'));await fs.chmod(root+'/qa-input.json',0o600);
   const {hostedArtifactUrl,...job}=input.job;
   if(!/^[\w.-]+\/[\w.-]+$/.test(job.repository)||!/^\w[\w./-]{0,119}$/.test(job.base)||job.base.includes('..')||!/^[a-f0-9]{40}$/.test(job.revision)||!/^[a-f0-9]{40}$/.test(input.engineRevision))throw new Error('Invalid immutable inputs');
+  stage='enforcing hosted network isolation';
+  await command('sudo',['sysctl','-w','net.ipv6.conf.all.disable_ipv6=1','net.ipv6.conf.default.disable_ipv6=1']);
   stage='preparing the QA engine';
   await command('git',['-c','core.hooksPath=/dev/null','clone','--no-checkout','--filter=blob:none','https://github.com/Vaidehi2510/QA-testbot.git',root+'/engine']);
   await command('git',['-c','core.hooksPath=/dev/null','checkout','--detach',input.engineRevision],root+'/engine');

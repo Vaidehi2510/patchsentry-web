@@ -1,6 +1,7 @@
 const {execFileSync}=require('node:child_process');
 const fs=require('node:fs');
 const root='/vercel/sandbox';
+execFileSync('sudo',['sysctl','-w','net.ipv6.conf.all.disable_ipv6=1','net.ipv6.conf.default.disable_ipv6=1'],{stdio:'ignore',timeout:10000});
 fs.writeFileSync(root+'/package.json',JSON.stringify({private:true,dependencies:{'playwright-core':'1.63.0'}}));
 execFileSync('npm',['install','--ignore-scripts','--no-audit','--no-fund'],{cwd:root,stdio:'ignore',timeout:60000});
 execFileSync('node',[root+'/node_modules/playwright-core/cli.js','install','--with-deps','chromium','firefox','webkit'],{cwd:root,stdio:'ignore',timeout:180000});

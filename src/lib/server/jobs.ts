@@ -43,6 +43,7 @@ export async function createJob(database: Database, project: QueueProject, body:
     const hosted=project.execution_mode==='hosted' && project.settings.backend==='openrouter';
     if(hosted){
       await q('LOCK TABLE qa_jobs IN SHARE ROW EXCLUSIVE MODE');
+      await q("UPDATE qa_jobs SET status='blocked',message='Hosted worker expired or startup was interrupted. Review the prior attempt and request a new run; no automatic retry was made.',lease_expires_at=NULL,updated_at=now() WHERE execution_mode='hosted' AND ((status='running' AND lease_expires_at<=now()) OR (status='queued' AND created_at<now()-interval '5 minutes'))");
       const usage=(await q<{monthly:string;active:string}>("SELECT count(*) FILTER (WHERE created_at>=date_trunc('month',now()) AND (status IN ('queued','running','completed') OR attempts>0)) AS monthly,count(*) FILTER (WHERE status IN ('queued','running')) AS active FROM qa_jobs WHERE execution_mode='hosted'",[])).rows[0];
       if(Number(usage.monthly)>=8||Number(usage.active)>=2)throw new JobError(409,'Hosted worker capacity or the shared monthly pilot allowance is full. No paid work was started.');
     }

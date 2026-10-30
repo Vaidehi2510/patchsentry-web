@@ -17,7 +17,7 @@ import { policyFor } from './quality';
 
 const hash = (v:string) => createHash('sha256').update(v).digest('hex');
 // Deny special-use networks even when an allowed hostname resolves to one later.
-export const deniedNetworks = ['0.0.0.0/8','10.0.0.0/8','100.64.0.0/10','127.0.0.0/8','169.254.0.0/16','172.16.0.0/12','192.0.0.0/24','192.0.2.0/24','192.168.0.0/16','198.18.0.0/15','198.51.100.0/24','203.0.113.0/24','224.0.0.0/4','240.0.0.0/4','::/128','::1/128','::ffff:0:0/96','64:ff9b::/96','100::/64','2001::/23','2002::/16','fc00::/7','fe80::/10','ff00::/8'];
+export const deniedNetworks = ['0.0.0.0/8','10.0.0.0/8','100.64.0.0/10','127.0.0.0/8','169.254.0.0/16','172.16.0.0/12','192.0.0.0/24','192.0.2.0/24','192.168.0.0/16','198.18.0.0/15','198.51.100.0/24','203.0.113.0/24','224.0.0.0/4','240.0.0.0/4'];
 export function publicAddress(ip:string) {
   if (isIP(ip)===4) { const p=ip.split('.').map(Number);return !(p[0]===0||p[0]===10||p[0]===127||p[0]>=224||p[0]===100&&p[1]>=64&&p[1]<=127||p[0]===169&&p[1]===254||p[0]===172&&p[1]>=16&&p[1]<=31||p[0]===192&&(p[1]===168||p[1]===0||p[1]===2)||p[0]===198&&(p[1]===18||p[1]===19||p[1]===51)||p[0]===203&&p[1]===0&&p[2]===113); }
   // Hosted previews must use globally routable unicast; reject mapped IPv4 and transition mechanisms.
@@ -26,7 +26,7 @@ export function publicAddress(ip:string) {
 export async function hostedPreview(template:string,job:Pick<JobInput,'revision'|'pr'>,resolve:typeof lookup=lookup) {
   const url=new URL(template.replaceAll('{sha}',job.revision).replaceAll('{pr}',String(job.pr?.number||0)));
   if(url.protocol!=='https:'||url.port&&url.port!=='443'||url.username||url.password||url.search||url.hash||!url.hostname.includes('.')||isIP(url.hostname.replace(/^\[|\]$/g,'')))throw new JobError(400,'Hosted QA needs a public HTTPS preview hostname on port 443. Private previews use the optional private runner.');
-  const addresses=await resolve(url.hostname,{all:true});if(!addresses.length||addresses.some(a=>!publicAddress(a.address)))throw new JobError(400,'This preview resolves to a private or reserved address. Use a public disposable preview for hosted QA.');
+  const addresses=await resolve(url.hostname,{all:true});if(!addresses.some(a=>a.family===4)||addresses.some(a=>!publicAddress(a.address)))throw new JobError(400,'This preview resolves to a private or reserved address. Use a public disposable preview for hosted QA.');
   return url;
 }
 export interface HostedSandbox {
