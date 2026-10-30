@@ -1,3 +1,5 @@
+import {rolloutDecision} from './pilot-assurance';
+import {appendLedger} from './assessment-ledger';
 import {currentVisualDigest} from './visual-baselines';
 import {restrictedDomain} from './domain-policy';
 import {createHash,createHmac,randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
@@ -122,7 +124,9 @@ export async function automationResult(runtime:Runtime,projectId:string,request:
   const bugs=await q<{n:string}>("SELECT count(*) AS n FROM qa_bugs WHERE project_id=$1 AND status IN ('open','confirmed','reopened') AND payload->>'severity' IN ('critical','high')",[projectId]);if(Number(bugs.rows[0].n))reasons.push('Unresolved high-risk bugs or flaky-check investigations remain.');
   if(job.payload.target)reasons.push(...releaseGate(report,{revision:job.payload.revision,target:job.payload.target}).reasons);
  }
- return {event:{id:event.id,status:event.status,reason:event.reason},job:job?{id:job.id,status:job.status,message:job.message,revision:job.payload.revision,target:job.payload.target}:null,recordId:report?.recordId||null,score,canProceed:reasons.length===0,reasons};
+ const assessmentPassed=reasons.length===0,rollout=await rolloutDecision(runtime,projectId,report?.recordId||null),decision={eventId:event.id,recordId:report?.recordId||null,assessmentPassed,releaseAuthorized:assessmentPassed&&rollout.releaseAuthorized,mode:rollout.mode,reasons:[...reasons,...rollout.reasons]};
+ if(report){const c=await runtime.database.connect();try{await c.query('BEGIN');await appendLedger(runtime,c.query.bind(c),projectId,'release-decision','release-decision:'+hash(canonical(decision)),decision,'Signed company CI',report.recordId);await c.query('COMMIT');}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}}
+ return {event:{id:event.id,status:event.status,reason:event.reason},job:job?{id:job.id,status:job.status,message:job.message,revision:job.payload.revision,target:job.payload.target}:null,recordId:report?.recordId||null,score,assessmentPassed,rollout,canProceed:decision.releaseAuthorized,reasons:decision.reasons};
 }
 
 async function reconcileOpenPullRequests(runtime:Runtime,projectId:string){

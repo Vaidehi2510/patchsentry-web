@@ -14,7 +14,7 @@ async function deliver(result){let safe=JSON.stringify(result).split(input.apiKe
 
 async function main(){
   input=JSON.parse(await fs.readFile(root+'/qa-input.json','utf8'));await fs.chmod(root+'/qa-input.json',0o600);
-  const {hostedArtifactUrl,unitTests,...job}=input.job;
+  const {hostedArtifactUrl,unitTests,githubBuild,...job}=input.job;
   if(!/^[\w.-]+\/[\w.-]+$/.test(job.repository)||!/^\w[\w./-]{0,119}$/.test(job.base)||job.base.includes('..')||!/^[a-f0-9]{40}$/.test(job.revision)||!/^[a-f0-9]{40}$/.test(input.engineRevision))throw new Error('Invalid immutable inputs');
   stage='enforcing hosted network isolation';
   require('./hosted-system.cjs')();

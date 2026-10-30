@@ -1,3 +1,4 @@
+import {archiveAssessment} from './assessment-ledger';
 import {currentVisualDigest,hostedBaselines} from './visual-baselines';
 import {executeHostedUnits,type HostedUnitResult} from './hosted-unit';
 import { createHash, randomBytes } from 'node:crypto';
@@ -92,8 +93,9 @@ const Completion=z.object({status:z.enum(['completed','blocked','failed']),repor
 export async function completeHosted(runtime:Runtime,jobId:string,request:Request,body:unknown){
   const input=Completion.safeParse(body);if(!input.success)throw new JobError(400,'Invalid hosted result.');
   const token=request.headers.get('authorization')?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1];if(!token)throw new JobError(401,'Job capability required.');
-  const client=await runtime.database.connect();let projectId='';
-  try{await client.query('BEGIN');const row=(await client.query<HostedRow>("SELECT * FROM qa_jobs WHERE id=$1 AND execution_mode='hosted' FOR UPDATE",[jobId])).rows[0];if(!row||row.callback_hash!==hash(token))throw new JobError(403,'Invalid job capability.');projectId=row.project_id;
+  const binding=(await runtime.database.query<{project_id:string}>('SELECT project_id FROM qa_jobs WHERE id=$1 AND callback_hash=$2',[jobId,hash(token)])).rows[0];if(!binding)throw new JobError(403,'Invalid job capability.');
+  const client=await runtime.database.connect();let projectId=binding.project_id;
+  try{await client.query('BEGIN');await client.query('SELECT id FROM projects WHERE id=$1 FOR UPDATE',[projectId]);const row=(await client.query<HostedRow>("SELECT * FROM qa_jobs WHERE id=$1 AND execution_mode='hosted' FOR UPDATE",[jobId])).rows[0];if(!row||row.callback_hash!==hash(token))throw new JobError(403,'Invalid job capability.');projectId=row.project_id;
     if(row.status==='completed'){await client.query('COMMIT');return {ok:true,duplicate:true};}
     if(row.status!=='running'||!row.hosted_expires_at||Date.parse(row.hosted_expires_at)<Date.now())throw new JobError(409,'Hosted job expired or was cancelled.');
     const result=input.data,report=result.report;let unitDurationMs=0;
@@ -102,6 +104,7 @@ export async function completeHosted(runtime:Runtime,jobId:string,request:Reques
     if(result.status==='completed'&&(!report||!jobReportMatches(row.payload,report)||report.recordId!==hash(`portal:${row.id}:${row.payload.repository}:${row.payload.revision}`)))throw new JobError(409,'Hosted report does not match this exact job and revision.');
     if(report&&result.status==='completed'){
       await client.query('INSERT INTO qa_runs (project_id,record_id,payload) VALUES ($1,$2,$3::jsonb)',[projectId,report.recordId,JSON.stringify({...report,score:computeScore(report),receivedAt:new Date().toISOString()})]);
+      await archiveAssessment(runtime,client.query.bind(client),projectId,report);
       await client.query('INSERT INTO qa_usage (project_id,record_id,payload) VALUES ($1,$2,$3::jsonb)',[projectId,report.recordId,JSON.stringify({durationMs:result.durationMs+unitDurationMs,unitDurationMs,inferenceUsd:report.ai.costUsd,infrastructureUsd:null,humanMinutes:null,costIsEstimate:report.ai.costIsEstimate,jobId})]);
     }
     await client.query("UPDATE qa_jobs SET status=$2,record_id=$3,message=$4,lease_expires_at=NULL,updated_at=now() WHERE id=$1",[jobId,result.status,result.status==='completed'?report!.recordId:null,result.message]);

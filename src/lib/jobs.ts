@@ -65,8 +65,9 @@ export const RunnerSchema = z.object({
   modelSetup:z.object({publicKey:z.string().min(100).max(2000),backends:z.array(z.enum(['openrouter','local'])).min(1).max(2)}).strict().optional(),
 }).strict().refine(v => !v.ready || v.executeJobs && v.missing.length === 0, "A ready runner must be enrolled and have no missing prerequisites.");
 export type Runner = z.infer<typeof RunnerSchema>;
-export const JobRequestSchema = z.object({ hostedArtifactUrl: PreviewTemplateSchema.optional(), prNumber: z.number().int().positive().max(100000000).optional(), target: AssessmentTargetSchema.optional(), revision: z.string().regex(/^[a-fA-F0-9]{40}$/), dedupeKey: z.string().uuid() }).strict().refine(v => Boolean(v.prNumber) !== Boolean(v.target), "Choose one PR, build or release target.");
+export const JobRequestSchema = z.object({ githubBuild:z.object({runId:z.number().int().positive(),artifactId:z.number().int().positive()}).strict().optional(), hostedArtifactUrl: PreviewTemplateSchema.optional(), prNumber: z.number().int().positive().max(100000000).optional(), target: AssessmentTargetSchema.optional(), revision: z.string().regex(/^[a-fA-F0-9]{40}$/), dedupeKey: z.string().uuid() }).strict().refine(v => Boolean(v.prNumber) !== Boolean(v.target), "Choose one PR, build or release target.");
 export const JobInputSchema = z.object({
+  githubBuild:z.object({runId:z.number().int().positive(),artifactId:z.number().int().positive()}).strict().optional(),
   hostedArtifactUrl: PreviewTemplateSchema.optional(),
   qualityPlan:PlanSnapshot.optional(),
   requestedBy: z.string().max(100).optional(),

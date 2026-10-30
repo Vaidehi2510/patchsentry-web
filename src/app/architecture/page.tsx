@@ -81,8 +81,7 @@ export default function Architecture() {
             <h2>Start with two repositories</h2>
             <p>
               Use the website plus QA-testbot for today’s workflow. Keep the
-              product separate and read-only. Keep Ledger optional until you
-              need and implement its separate service integration.
+              product separate and read-only. Pilot & Ledger now retains assessment versions, rollout policies and release decisions in the hosted website. Deploy the Java Ledger only if you need an additional company archive, using a scoped runner token and the explicit archive connection.
             </p>
             <Link href="/app?tab=integration" className="button button-primary">
               Open integration setup

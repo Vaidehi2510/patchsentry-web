@@ -1,4 +1,5 @@
 "use client";
+import {AssuranceHub} from "./assurance-hub";
 import {DeviceFarm} from "./device-farm";
 import {VisualBaselines} from "./visual-baselines";
 import {AutomationPanel} from './automation-panel';
@@ -52,11 +53,12 @@ import "./workspace.css";
 import { MotionToggle } from "./motion";
 import { runnerOnline } from "@/lib/jobs";
 
-type Tab = "overview" | "runs" | "models" | "testing" | "integration" | "tests" | "team" | "account" | "quality" | "automation";
+type Tab = "overview" | "runs" | "models" | "testing" | "integration" | "tests" | "team" | "account" | "quality" | "automation" | "assurance";
 type User = { id: string; name: string; email: string };
 const nav = [
   { id: "overview" as Tab, label: "Overview", icon: LayoutDashboard },
   { id: "automation" as Tab, label: "Automation & reports", icon: Clock3 },
+  { id: "assurance" as Tab, label: "Pilot & Ledger", icon: ShieldCheck },
   { id: "quality" as Tab, label: "Product QA", icon: ClipboardCheck },
   { id: "runs" as Tab, label: "QA reports", icon: GitPullRequest },
   { id: "tests" as Tab, label: "Test library", icon: Code2 },
@@ -403,7 +405,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   <h1 id="workspace-title" tabIndex={-1}>
                     {selected
                       ? subjectLabel(selected)
-                      : tab === "automation" ? "QA that keeps up with your product." : tab === "account" ? "Your account. Your control." : tab === "overview"
+                      : tab === "assurance" ? "Earn confidence. Keep the evidence." : tab === "automation" ? "QA that keeps up with your product." : tab === "account" ? "Your account. Your control." : tab === "overview"
                         ? "Ship with your eyes open."
                         : tab === "runs"
                           ? "Every change. Every finding."
@@ -414,7 +416,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   <p>
                     {selected
                       ? subjectTitle(selected)
-                      : tab === "automation" ? "Automatic triggers, explicit exceptions, weekly evidence and optional team updates." : tab === "account" ? "Manage your profile, sign-in security, devices and workspaces." : tab === "overview"
+                      : tab === "assurance" ? "Measured pilots, staged release gates and immutable assessment receipts." : tab === "automation" ? "Automatic triggers, explicit exceptions, weekly evidence and optional team updates." : tab === "account" ? "Manage your profile, sign-in security, devices and workspaces." : tab === "overview"
                         ? "A clear view of what’s ready, what’s risky, and what needs you."
                         : tab === "runs"
                           ? "Trace each result to the exact revision that was tested."
@@ -481,6 +483,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                 />
               ) : (
                 <>
+                  {tab === "assurance" && <AssuranceHub key={project.id} project={project} demo={demo}/>}
                   {tab === "quality" && <QualityHub project={project} runs={runs} demo={demo} navigate={go}/>}
                   {tab === "team" && <TeamOperations key={project.id} project={project} demo={demo} />}
                   {tab === "team" && <DeviceFarm project={project} demo={demo}/>}
@@ -946,7 +949,7 @@ function RunDetail({
         </div>
       </div>
       <section className="panel"><EvidencePanel root={`/api/projects/${projectId}`} recordId={run.recordId} demo={demo}/></section>
-      {run.target && <section className="panel release-summary"><div><span className="eyebrow">VERSION-LEVEL QA</span><h2>{releaseGate(run, { revision: run.revision, target: run.target }).eligible ? "QA evidence meets the release gate" : "Release gate needs attention"}</h2><p>Platform: {platformLabels[run.target.platform]} · {run.target.kind === 'release' ? 'Version' : 'Build'}: {run.target.name}</p><label>Exact artifact SHA-256<code>{run.target.artifactSha256}</code></label><p className="fineprint">Use the deployment gate against the same artifact before shipping. It never deploys the product or changes its source.</p></div><ul>{releaseGate(run, { revision: run.revision, target: run.target }).reasons.map(reason => <li key={reason}>{reason}</li>)}</ul></section>}
+      {run.target && <section className="panel release-summary"><div><span className="eyebrow">VERSION-LEVEL QA</span><h2>{releaseGate(run, { revision: run.revision, target: run.target }).eligible ? "Assessment checks passed · release policy still applies" : "Release gate needs attention"}</h2><p>Platform: {platformLabels[run.target.platform]} · {run.target.kind === 'release' ? 'Version' : 'Build'}: {run.target.name}</p><label>Exact artifact SHA-256<code>{run.target.artifactSha256}</code></label><p className="fineprint">Use the deployment gate against the same artifact before shipping. It never deploys the product or changes its source.</p></div><ul>{releaseGate(run, { revision: run.revision, target: run.target }).reasons.map(reason => <li key={reason}>{reason}</li>)}</ul></section>}
       <div className="detail-grid">
         <section className="panel">
           <div className="panel-heading">
@@ -1108,7 +1111,7 @@ function Integration({
     typeof window !== "undefined"
       ? location.origin
       : "https://YOUR-PATCHSENTRY-SITE";
-  if(project.settings.backend==='openrouter'&&!advanced)return <div className="quality-hub"><section className="panel operations-panel"><span className="eyebrow">HOSTED QA · NO CUSTOMER INFRASTRUCTURE</span><h2>Run QA from your browser</h2><p>In Models &amp; agents, paste and verify your OpenRouter key. Save your model selection, then add a public disposable preview and expected behavior in Testing setup.</p><p>Patchsentry provisions an isolated cloud worker for each requested run. You do not need a runner token, a connector command, Docker, or an always-on computer.</p><div className="notice"><p>{project.executionMode==='hosted'?'Hosted execution is selected. Request a run after saving your model, preview and expectations.':'First verify your OpenRouter key in Models & agents to select hosted execution. No runner connection is required.'}</p></div><p className="fineprint">Hosted web testing reads public or connected private GitHub repositories. Builds/releases also require an immutable public artifact URL. Private repositories can connect read access below. Local-only models, authored unit-test execution and native device suites use the optional advanced runner.</p><button className="button button-secondary" onClick={async()=>{try{if(!demo){await api(`/api/projects/${project.id}`,{method:'PATCH',body:JSON.stringify({executionMode:'self-hosted'})});refresh();}setAdvanced(true);}catch(e){setError((e as Error).message);}}}>Advanced: configure a private-network or self-hosted runner</button>{error&&<p className="form-error" role="alert">{error}</p>}</section><HostedRepositorySetup projectId={project.id} repository={project.repository} demo={demo}/></div>;
+  if(project.settings.backend==='openrouter'&&!advanced)return <div className="quality-hub"><section className="panel operations-panel"><span className="eyebrow">HOSTED QA · NO CUSTOMER INFRASTRUCTURE</span><h2>Run QA from your browser</h2><p>In Models &amp; agents, paste and verify your OpenRouter key. Save your model selection, then add a public disposable preview and expected behavior in Testing setup.</p><p>Patchsentry provisions an isolated cloud worker for each requested run. You do not need a runner token, a connector command, Docker, or an always-on computer.</p><div className="notice"><p>{project.executionMode==='hosted'?'Hosted execution is selected. Request a run after saving your model, preview and expectations.':'First verify your OpenRouter key in Models & agents to select hosted execution. No runner connection is required.'}</p></div><p className="fineprint">Hosted web testing reads public or connected private GitHub repositories. Builds/releases also require an immutable public artifact URL. Private repositories can connect read access below. Authored Node tests run in an offline hosted VM; managed native testing uses your AWS Device Farm account. Local-only models and private suites can use the optional advanced runner.</p><button className="button button-secondary" onClick={async()=>{try{if(!demo){await api(`/api/projects/${project.id}`,{method:'PATCH',body:JSON.stringify({executionMode:'self-hosted'})});refresh();}setAdvanced(true);}catch(e){setError((e as Error).message);}}}>Advanced: configure a private-network or self-hosted runner</button>{error&&<p className="form-error" role="alert">{error}</p>}</section><HostedRepositorySetup projectId={project.id} repository={project.repository} demo={demo}/></div>;
   return (
     <div className="integration-layout">
       <section className="panel integration-main">

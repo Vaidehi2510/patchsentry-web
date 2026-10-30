@@ -3,6 +3,7 @@ import { createDatabase, type Database } from "./database";
 import type { CatalogModel } from "../contracts";
 
 export interface Runtime {
+  ledgerFetch?: typeof fetch;
   deviceFarmSend?: (command:unknown)=>Promise<unknown>;
   ssoFetch?: typeof fetch;
   defer?: (work:()=>Promise<unknown>)=>void;

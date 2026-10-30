@@ -1,3 +1,4 @@
+import {migrateAssurance} from './assurance-schema';
 import {migrateEnterprise} from "./enterprise-schema";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
@@ -14,6 +15,7 @@ export interface AuthConfig {
   sendSecurityCode?: SendSecurityCode;
   sendInvitation?: SendInvitation;
   cronSecret?: string;
+  ledgerAllowedOrigins?: string[];
   sendWeeklyReport?: SendWeeklyReport;
 }
 
@@ -43,7 +45,7 @@ export function authConfig(
     throw new Error("BETTER_AUTH_URL must be an exact site origin");
   if (production && (url.protocol !== "https:" || !env.DATABASE_URL))
     throw new Error("Production requires HTTPS and DATABASE_URL");
-  return { secret: env.BETTER_AUTH_SECRET, origin: url.origin, production, sendSignInLink: gmailSender(url.origin, env), sendSecurityCode:gmailSecuritySender(env), sendInvitation:gmailInvitationSender(url.origin,env),sendWeeklyReport:gmailWeeklyReportSender(url.origin,env),cronSecret:env.CRON_SECRET };
+  return { secret: env.BETTER_AUTH_SECRET, origin: url.origin, production, sendSignInLink: gmailSender(url.origin, env), sendSecurityCode:gmailSecuritySender(env), sendInvitation:gmailInvitationSender(url.origin,env),sendWeeklyReport:gmailWeeklyReportSender(url.origin,env),ledgerAllowedOrigins:(env.LEDGER_ALLOWED_ORIGINS||'').split(',').map(v=>v.trim()).filter(Boolean),cronSecret:env.CRON_SECRET };
 }
 
 export function authOptions(
@@ -171,6 +173,7 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
   await database.query("CREATE TABLE IF NOT EXISTS qa_work_domains (project_id text PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,domain text NOT NULL,challenge text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),verified_at timestamptz)");
   await database.query("ALTER TABLE qa_work_domains ADD COLUMN IF NOT EXISTS restricted boolean NOT NULL DEFAULT false");
   await migrateEnterprise(database);
+  await migrateAssurance(database);
   // Enforce even for an email-change confirmation issued before policy activation.
   await database.query(`CREATE OR REPLACE FUNCTION qa_guard_owner_domain() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
     IF NEW.email IS DISTINCT FROM OLD.email AND EXISTS (SELECT 1 FROM projects p JOIN qa_work_domains d ON d.project_id=p.id WHERE p.owner_id=OLD.id AND d.restricted=true AND split_part(lower(NEW.email),'@',2)<>d.domain) THEN

@@ -72,3 +72,8 @@ Weekly processing has a protected Monday schedule plus daily catch-up. Reports a
 ## Scope still requiring integration or independent validation
 
 Project permissions, repository verification, MFA, audit exports and retention are implemented. Microsoft Entra SSO, SCIM User provisioning and company-account AWS Device Farm integration are available after enterprise setup. No independent security assessment/certification is claimed. Existing enrolled native/Appium and isolated test-suite paths need real devices/test infrastructure and evidence. Hosted authored Node tests run in a separate offline VM; persistent hosted visual baselines require explicit review. See [enterprise setup and evidence boundaries](enterprise-qa.md). Weekly reports expose these boundaries rather than presenting the product as a complete replacement for every QA function.
+
+
+## Advisory and enforced rollout
+
+See [Pilot & Ledger](pilot-ledger.md). Assessment results and deployment authorization are distinct. New policies are advisory. The signed result endpoint returns `assessmentPassed` for the executed checks and `canProceed` only for a qualified enforced policy. Updated CI publication is explicitly non-gating in advisory mode. Build manifests may include `request.githubBuild` with the GitHub run/artifact IDs for automatic provenance verification.

@@ -12,7 +12,7 @@ try{
  const accepted=await send(url.href,body);console.log('QA event accepted: '+accepted.id);
  if(!args.includes('--no-wait')){
   const deadline=Date.now()+20*60*1000;let finished=false;
-  while(Date.now()<deadline){const result=await send(url.href.replace(/\/ci$/,'/result'),JSON.stringify({deliveryId:delivery}));if(result.canProceed){console.log('Required QA evidence passed for the requested assessment.');finished=true;break;}if(['completed','failed','blocked','cancelled'].includes(result.job?.status)||!result.job&&['blocked','excluded'].includes(result.event.status))throw Error('QA did not approve this assessment. Review the dashboard before deploying.');await new Promise(r=>setTimeout(r,10000));}
+  while(Date.now()<deadline){const result=await send(url.href.replace(/\/ci$/,'/result'),JSON.stringify({deliveryId:delivery}));if(result.rollout?.mode==='advisory'){console.log('Advisory QA is non-gating and does not authorize deployment. Follow the assessment in Patchsentry.');finished=true;break;}if(result.canProceed){console.log('Required QA evidence passed for the requested assessment.');finished=true;break;}if(['completed','failed','blocked','cancelled'].includes(result.job?.status)||!result.job&&['blocked','excluded'].includes(result.event.status))throw Error('QA did not approve this assessment. Review the dashboard before deploying.');await new Promise(r=>setTimeout(r,10000));}
   if(!finished)throw Error('QA did not finish within 20 minutes. Deployment must remain blocked.');
  }
 }catch(error){console.error(error.message||'CI QA publication failed.');process.exitCode=1;}
