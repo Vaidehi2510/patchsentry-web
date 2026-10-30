@@ -24,6 +24,6 @@ Hosted mode currently supports public repositories and public HTTPS web previews
 
 The website's Vercel runtime authenticates Sandbox operations with its platform OIDC identity; no personal GitHub or Vercel token is passed to workers. `scripts/hosted-engine-revision.txt` pins the public QA engine to a reviewed commit. All bootstrap scripts are traced into the server deployment. Production migrations run before the new site is published.
 
-`CRON_SECRET` protects daily retention cleanup and the operator-only `POST /api/internal/hosted-check` diagnostic. That diagnostic starts one bounded, nonpersistent sandbox and runs actual Chromium, Firefox and WebKit assertions. It sends no product source and makes no model call. It is limited to three requests per day, and its sandbox is stopped in a `finally` block. Do not expose the operator secret in browser code or logs.
+`CRON_SECRET` protects daily retention cleanup and the operator-only `POST /api/internal/hosted-check` diagnostic. That diagnostic starts one bounded, nonpersistent sandbox and runs actual Chromium, Firefox and WebKit assertions. It sends no product source and makes no model call. It is limited to six requests per day, and its sandbox is stopped in a `finally` block. Do not expose the operator secret in browser code or logs.
 
 The scheduled GitHub QA controller remains disabled; hosted work starts only in response to an authorized website request. No GitHub schedule or workflow-dispatch permission is required.
