@@ -722,7 +722,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                 <input
                   name="repository"
                   required
-                  pattern="[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"
+                  pattern="(?:[A-Za-z0-9_.]|-)+/(?:[A-Za-z0-9_.]|-)+"
                   maxLength={201}
                   placeholder="your-username/your-project"
                 />
@@ -948,6 +948,7 @@ function RunDetail({
           <span>check score</span>
         </div>
       </div>
+      {run.executionEvidence&&run.executionEvidence.status!=='verified'&&<section className="notice"><h2>Execution scope needs attention</h2><p>The check score counts the reported checks. It does not establish that every requested test ran or authorize a release.</p><ul>{run.executionEvidence.reasons.map(reason=><li key={reason}>{reason}</li>)}</ul></section>}
       <section className="panel"><EvidencePanel root={`/api/projects/${projectId}`} recordId={run.recordId} demo={demo}/></section>
       {run.target && <section className="panel release-summary"><div><span className="eyebrow">VERSION-LEVEL QA</span><h2>{releaseGate(run, { revision: run.revision, target: run.target }).eligible ? "Assessment checks passed · release policy still applies" : "Release gate needs attention"}</h2><p>Platform: {platformLabels[run.target.platform]} · {run.target.kind === 'release' ? 'Version' : 'Build'}: {run.target.name}</p><label>Exact artifact SHA-256<code>{run.target.artifactSha256}</code></label><p className="fineprint">Use the deployment gate against the same artifact before shipping. It never deploys the product or changes its source.</p></div><ul>{releaseGate(run, { revision: run.revision, target: run.target }).reasons.map(reason => <li key={reason}>{reason}</li>)}</ul></section>}
       <div className="detail-grid">

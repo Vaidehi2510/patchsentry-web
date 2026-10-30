@@ -6,6 +6,8 @@ import { createAuth, migrateDatabase } from "../src/lib/server/auth";
 import { handleRequest } from "../src/lib/server/api";
 import { secureSession, cookieJar } from "./auth-session";
 import type { Runtime } from "../src/lib/server/runtime";
+import {rolloutDecision} from "../src/lib/server/pilot-assurance";
+import {TestingProfileSchema} from "../src/lib/jobs";
 import { sealProvider } from "../src/lib/server/provider-vault";
 const config = {
   origin: "https://portal.example",
@@ -288,6 +290,22 @@ test("reviewed evidence enables only qualified rollout; unknown costs and stale 
     409,
     "Stale policy versions cannot overwrite enforcement.",
   );
+  // A qualified protocol fixture must be capable of authorizing a healthy,
+  // fresh, server-enrolled assessment; rejecting every release is not success.
+  const original=(await runtime.database.query<any>('SELECT settings,testing_profile FROM projects WHERE id=$1',[project])).rows[0];
+  const profile=TestingProfileSchema.parse({previewUrlTemplate:'https://qualified.fixture',goals:{schemaVersion:1,goals:[{id:'positive',name:'Positive fixture',start:'/',requirement:'Known fixture requirement',inputs:{},assertions:[{id:'heading',action:'expectText',selector:'h1',text:'Fixture'}]}]}}),settings={...original.settings,roles:['planner'],backend:'local',model:'fixture'};
+  const recordId=hash('qualified-positive-protocol'),jobId=randomUUID(),healthy=report(recordId,['goal-positive','replay-positive'].map(id=>({id,name:id,method:'automated',required:true,status:'passed'})));
+  try{
+    await runtime.database.query('UPDATE projects SET settings=$2::jsonb,testing_profile=$3::jsonb WHERE id=$1',[project,JSON.stringify(settings),JSON.stringify(profile)]);
+    await runtime.database.query('INSERT INTO qa_runs(project_id,record_id,payload) VALUES($1,$2,$3::jsonb)',[project,recordId,JSON.stringify(healthy)]);
+    await runtime.database.query("INSERT INTO qa_jobs(id,project_id,dedupe_key,payload,status,record_id) VALUES($1,$2,$3,$4::jsonb,'completed',$5)",[jobId,project,randomUUID(),JSON.stringify({schemaVersion:1,id:jobId,repository,revision,pr:{number:1},settings,testingProfile:profile,unitTests:[],base:'main'}),recordId]);
+    assert.equal((await rolloutDecision(runtime,project,recordId)).releaseAuthorized,true,'Qualified healthy fixture can pass.');
+    await runtime.database.query('UPDATE projects SET testing_profile=$2::jsonb WHERE id=$1',[project,JSON.stringify({...profile,previewUrlTemplate:'https://different.fixture'})]);
+    const changed=await rolloutDecision(runtime,project,recordId);assert.equal(changed.releaseAuthorized,false);assert.ok(changed.reasons.some(v=>v.includes('configuration differs')));
+    await runtime.database.query('UPDATE projects SET testing_profile=$2::jsonb WHERE id=$1',[project,JSON.stringify(profile)]);
+    await runtime.database.query("UPDATE qa_runs SET payload=jsonb_set(payload,'{completedAt}',to_jsonb($3::text)) WHERE project_id=$1 AND record_id=$2",[project,recordId,new Date(Date.now()-7200000).toISOString()]);
+    assert.equal((await rolloutDecision(runtime,project,recordId)).releaseAuthorized,false,'A formerly eligible fixture cannot authorize with stale evidence.');
+  }finally{await runtime.database.query('UPDATE projects SET settings=$2::jsonb,testing_profile=$3::jsonb WHERE id=$1',[project,JSON.stringify(original.settings),JSON.stringify(original.testing_profile)]);}
   await runtime.database.query(
     "UPDATE qa_usage SET payload='{}'::jsonb WHERE project_id=$1 AND record_id=$2",
     [project, ids[0]],

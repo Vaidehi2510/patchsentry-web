@@ -138,6 +138,7 @@ export async function verifyBuildProvenance(
     c = await r.database.connect();
   try {
     await c.query("BEGIN");
+    await c.query("SELECT id FROM projects WHERE id=$1 FOR UPDATE",[id]);
     await c.query(
       "INSERT INTO qa_build_provenance(project_id,record_id,payload) VALUES($1,$2,$3::jsonb) ON CONFLICT(project_id,record_id) DO UPDATE SET payload=EXCLUDED.payload",
       [id, input.data.recordId, JSON.stringify(payload)],
@@ -147,7 +148,7 @@ export async function verifyBuildProvenance(
       c.query.bind(c),
       id,
       "build-provenance",
-      "provenance:" + input.data.recordId + ":" + payload.reportDigest,
+      "provenance:" + input.data.recordId + ":" + createHash("sha256").update(canonical(payload)).digest("hex"),
       payload,
       actor,
       input.data.recordId,

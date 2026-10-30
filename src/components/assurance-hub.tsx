@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import type { Project } from "@/lib/contracts";
+import {PilotEvaluation} from "./pilot-evaluation";
 import benchmark from "@/data/todomvc-benchmark.json";
 async function call(url: string, method = "GET", body?: unknown) {
   const r = await fetch(url, {
@@ -35,6 +36,7 @@ export function AssuranceHub({
     [name, setName] = useState(""),
     [revision, setRevision] = useState(""),
     [cases, setCases] = useState(""),
+    [partition,setPartition]=useState("development"),
     [records, setRecords] = useState<Record<string, string>>({}),
     [origin, setOrigin] = useState(""),
     [token, setToken] = useState(""),
@@ -129,7 +131,7 @@ export function AssuranceHub({
               {state.costs.assessments} distinct assessments ·{" "}
               {state.productionMetrics.missed} observed misses ·{" "}
               {state.productionMetrics.unverifiedDefects} unverified defect
-              cases.
+              cases. Distinct labeled defect IDs: {state.uniqueDefects?.labeledIds??0}; executions without a distinct defect ID: {state.uniqueDefects?.executionsWithoutDefectId??0}. Held-out cases: {state.heldOutMetrics?.cases??0}. Browser repeats are executions, not distinct defects.
             </p>
             <p>
               Known inference: ${state.costs.knownInferenceUsd.toFixed(4)}.
@@ -205,19 +207,22 @@ export function AssuranceHub({
                   .split("\n")
                   .filter((v) => v.trim())
                   .map((line) => {
-                    const [id, expected, checkId, ...requirement] = line
+                    const [id, expected, checkId, requirement, defectId, scenario] = line
                       .split("|")
                       .map((v) => v.trim());
                     return {
                       id,
                       expected,
                       checkId,
-                      requirement: requirement.join("|"),
+                      requirement,
+                      ...(defectId?{defectId}:{}),
+                      ...(scenario?{scenario}:{}),
                     };
                   });
                 await call(root + "/pilots", "POST", {
                   name,
                   kind: "production",
+                  partition,
                   repository: project.repository,
                   revision,
                   cases: lines,
@@ -229,6 +234,7 @@ export function AssuranceHub({
             }}
           >
             <fieldset disabled={!qa || busy}>
+              <label>Evaluation partition<select value={partition} onChange={e=>setPartition(e.target.value)}><option value="development">Development cases</option><option value="held-out">Held-out evaluation · labels frozen before execution</option></select></label>
               <label>
                 Pilot name
                 <input
@@ -352,6 +358,8 @@ export function AssuranceHub({
           </details>
         ))}
       </section>
+      <PilotEvaluation root={root} suites={state?.suites||[]} write={qa} demo={demo}/>
+      {state?.operations&&<section className="panel operations-panel"><h2>Unattended operations</h2><p>{state.operations.notice}</p><p>Shared pilot capacity: {state.operations.hosted.sharedMonthlyUsed}/{state.operations.hosted.limits.monthlyAssessments} monthly assessments; {state.operations.hosted.sharedActive}/{state.operations.hosted.limits.globalActive} active. Provider account quota has not been independently verified.</p><p>Authenticated maintenance: {state.operations.maintenanceConfigured?'configured; successful execution still needs monitoring':'not configured; operator setup required'}.</p><p className="fineprint">{state.operations.health?.notice}</p>{state.operations.health?.tasks.map((t:any)=><p key={t.name}>{t.name}: {t.interrupted?'interrupted':t.state}; last success: {t.last_succeeded_at?new Date(t.last_succeeded_at).toLocaleString():'not observed'}</p>)}<div className="testing-fields"><div><h3>Jobs</h3>{state.operations.jobs.map((v:any)=><p key={v.status}>{v.status}: {v.count}</p>)}</div><div><h3>Archive delivery</h3>{state.operations.archives.map((v:any)=><p key={v.status}>{v.status}: {v.count}</p>)}</div></div></section>}
       <section className="panel operations-panel">
         <h2>Release policy</h2>
         <p>
@@ -413,6 +421,8 @@ export function AssuranceHub({
                   </label>
                 ))}
               </div>
+              {[["requireHeldOut","Require a separate held-out evaluation before release"],["requireArchiveAcknowledgment","Require acknowledgment from the configured Java archive before release"],["requireRetainedEvidence","Require retained evidence for every required passing check"]].map(([key,label])=><label className="testing-checkbox" key={key}><input type="checkbox" checked={Boolean(policy[key])} onChange={e=>setPolicy({...policy,[key]:e.target.checked})}/>{label}</label>)}
+              <p className="fineprint">Both controls are opt-in. Missing archives or expired evidence block release when required. They do not turn an assessment into a passing result.</p>
               <label className="testing-checkbox">
                 <input
                   type="checkbox"
@@ -767,6 +777,7 @@ export function AssuranceHub({
             {ledger?.connection && (
               <>
                 <p>Connected: {ledger.connection.origin}</p>
+                <button disabled={busy} className="text-button" onClick={()=>action(()=>call(root+"/ledger/reconcile","POST",{}),"Archive receipts checked against the service. Inspect confirmed, failed and conflicting statuses.")}>Reconcile confirmed archive receipts</button>
                 <button
                   disabled={busy}
                   className="text-button"

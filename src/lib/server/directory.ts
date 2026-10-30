@@ -52,6 +52,8 @@ export async function scimEndpoint(r:Runtime,request:Request,id:string,path:stri
    }
    const input=z.object({userName:z.email().max(254).transform(v=>v.toLowerCase()),externalId:z.string().min(1).max(254).nullish(),active:z.boolean().default(true)}).safeParse(proposed);if(!input.success)throw new JobError(400,'A valid company userName email, externalId and boolean active are required.');
    if(!matchesDomain(input.data.userName,domain.domain))throw new JobError(403,'Directory users must match the verified project domain.');
+   if(old?.external_id&&input.data.externalId!==old.external_id)throw new JobError(409,'A directory externalId is a stable person binding and cannot be replaced or cleared. Recycled addresses require explicit identity review; do not reactivate the old resource for a different person.');
+   if(old&&!old.active&&input.data.active&&!old.external_id)throw new JobError(409,'An inactive directory identity without a stable externalId requires owner identity review before reactivation.');
    if(old&&old.email!==input.data.userName)throw new JobError(409,'Deactivate the old address and provision a new resource after the person verifies their new company email. Directory updates cannot change a verified Patchsentry account email.');
    const row=(await c.query<Row>('INSERT INTO qa_directory_users(id,project_id,external_id,email,active) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET external_id=EXCLUDED.external_id,active=EXCLUDED.active,updated_at=now() RETURNING *',[old?.id||randomUUID(),id,input.data.externalId||null,input.data.userName,input.data.active])).rows[0];
    if(!row.active)await revoke(c.query.bind(c),id,row.email);

@@ -1,4 +1,5 @@
-import {archiveAssessment} from './assessment-ledger';
+import {triageAssessment} from './automatic-triage';
+import {archiveAssessment,appendLedger} from './assessment-ledger';
 import {currentVisualDigest,hostedBaselines} from './visual-baselines';
 import {executeHostedUnits,type HostedUnitResult} from './hosted-unit';
 import { createHash, randomBytes } from 'node:crypto';
@@ -105,7 +106,9 @@ export async function completeHosted(runtime:Runtime,jobId:string,request:Reques
     if(report&&result.status==='completed'){
       await client.query('INSERT INTO qa_runs (project_id,record_id,payload) VALUES ($1,$2,$3::jsonb)',[projectId,report.recordId,JSON.stringify({...report,score:computeScore(report),receivedAt:new Date().toISOString()})]);
       await archiveAssessment(runtime,client.query.bind(client),projectId,report);
+      await triageAssessment(runtime,client.query.bind(client),projectId,report,jobId,row.payload);
       await client.query('INSERT INTO qa_usage (project_id,record_id,payload) VALUES ($1,$2,$3::jsonb)',[projectId,report.recordId,JSON.stringify({durationMs:result.durationMs+unitDurationMs,unitDurationMs,inferenceUsd:report.ai.costUsd,infrastructureUsd:null,humanMinutes:null,costIsEstimate:report.ai.costIsEstimate,jobId})]);
+      await appendLedger(runtime,client.query.bind(client),projectId,'usage-version','hosted-usage:'+jobId,{recordId:report.recordId,durationMs:result.durationMs+unitDurationMs,unitDurationMs,inferenceUsd:report.ai.costUsd,infrastructureUsd:null,humanMinutes:null,costIsEstimate:report.ai.costIsEstimate,source:'Hosted timing plus reported model usage; infrastructure and human time unknown.'},'Hosted worker',report.recordId);
     }
     await client.query("UPDATE qa_jobs SET status=$2,record_id=$3,message=$4,lease_expires_at=NULL,updated_at=now() WHERE id=$1",[jobId,result.status,result.status==='completed'?report!.recordId:null,result.message]);
     const q=client.query.bind(client);await audit(q,projectId,'Hosted worker','qa.'+result.status,jobId);await queueNotification(q,projectId,result.status==='completed'?'completed':'blocked',jobId+':hosted-complete',{repository:row.payload.repository,revision:row.payload.revision,target:row.payload.target,pr:row.payload.pr,requestedBy:row.payload.requestedBy,jobId,...(report?resultSummary(report):{}),message:result.message});

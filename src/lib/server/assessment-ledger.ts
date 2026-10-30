@@ -116,6 +116,11 @@ export async function appendLedger(
     await q("INSERT INTO qa_ledger_delivery(entry_id) VALUES($1)", [row.id]);
   return row;
 }
+export function assessmentDigest(raw: unknown) {
+  const {score,receivedAt,...body}=raw as Record<string,unknown>;
+  void score; void receivedAt;
+  return hash(canonical(RunInputSchema.parse(body)));
+}
 export async function archiveAssessment(
   r: Runtime,
   q: Database["query"],
@@ -135,6 +140,8 @@ export async function archiveAssessment(
     return null;
   const report = parsed.data,
     digest = hash(canonical(report));
+  const job=(await q<{id:string;execution_context:unknown}>("SELECT id,execution_context FROM qa_jobs WHERE project_id=$1 AND (record_id=$2 OR encode(sha256(convert_to('portal:'||id||':'||(payload->>'repository')||':'||(payload->>'revision'),'UTF8')),'hex')=$2) ORDER BY created_at DESC LIMIT 1",[projectId,report.recordId])).rows[0];
+  if(job?.execution_context)await appendLedger(r,q,projectId,'assessment-context','assessment-context:'+report.recordId+':'+digest,{recordId:report.recordId,jobId:job.id,context:job.execution_context,reportDigest:digest,toolVersions:{assessmentSchema:report.schemaVersion,model:report.ai.model,backend:report.ai.backend},limitations:report.limitations},actor,report.recordId);
   return appendLedger(
     r,
     q,

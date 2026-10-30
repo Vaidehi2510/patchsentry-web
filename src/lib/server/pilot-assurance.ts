@@ -1,8 +1,14 @@
+import {planSnapshot} from './quality';
+import {enabledUnitTests} from './test-cases';
+import {TestingProfileSchema,testingDefaults} from '../jobs';
+import {currentVisualDigest} from './visual-baselines';
+import {executionEvidenceReasons} from '../execution-evidence';
+import {retainedEvidenceChecks} from './evidence';
 import { randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
 import type { Runtime } from "./runtime";
 import { canonical } from "../quality";
-import { archiveAssessment, appendLedger } from "./assessment-ledger";
+import { archiveAssessment, appendLedger, assessmentDigest } from "./assessment-ledger";
 import { JobError } from "./jobs";
 const sha = z.string().regex(/^[a-f0-9]{64}$/),
   hash = (v: string) => createHash("sha256").update(v).digest("hex");
@@ -11,6 +17,8 @@ const Case = z
     id: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
     expected: z.enum(["defect", "clean", "identity-block"]),
     checkId: z.string().min(1).max(160),
+    defectId:z.string().regex(/^[A-Za-z0-9_-]{1,80}$/).optional(),
+    scenario:z.enum(['ui','api-data','permission','async','infrastructure','identity','other']).default('other'),
     requirement: z.string().min(1).max(1000),
   })
   .strict();
@@ -18,6 +26,7 @@ const Suite = z
   .object({
     name: z.string().trim().min(1).max(120),
     kind: z.enum(["controlled", "production"]),
+    partition:z.enum(["development","held-out"]).default("development"),
     repository: z.string().max(201),
     revision: z.string().regex(/^[a-f0-9]{40,64}$/),
     cases: z
@@ -38,6 +47,9 @@ export const AssurancePolicy = z
     minReliability: z.number().min(0.95).max(1),
     maxKnownInferenceUsd: z.number().min(0).max(10000),
     requireKnownCosts: z.boolean(),
+    requireHeldOut: z.boolean().default(false),
+    requireArchiveAcknowledgment: z.boolean().default(false),
+    requireRetainedEvidence: z.boolean().default(false),
     requiredEvidence: z
       .array(z.enum(["sso", "offboarding", "devices", "security-review"]))
       .max(4)
@@ -54,6 +66,9 @@ const defaults = {
   minReliability: 0.95,
   maxKnownInferenceUsd: 100,
   requireKnownCosts: true,
+  requireHeldOut: false,
+  requireArchiveAcknowledgment: false,
+  requireRetainedEvidence: false,
   requiredEvidence: ["security-review"] as (
     "security-review" | "sso" | "offboarding" | "devices"
   )[],
@@ -344,6 +359,8 @@ export async function assuranceState(r: Runtime, id: string) {
       (s) => s.kind === "production" && s.reviewer_id,
     ),
     measurements = measure(eligible.flatMap((s) => s.cases)),
+    heldOut=measure(eligible.filter(s=>s.payload.partition==='held-out').flatMap(s=>s.cases)),
+    defectGroups=new Map<string,string[]>(),
     recordIds = new Set(
       eligible.flatMap((s) => s.cases.map((c) => c.recordId).filter(Boolean)),
     ),
@@ -354,6 +371,8 @@ export async function assuranceState(r: Runtime, id: string) {
           .map((o) => [o.record_id, o]),
       ).values(),
     ];
+  for(const c of eligible.flatMap(s=>s.cases).filter(c=>c.expected==='defect'&&c.defectId)){defectGroups.set(c.defectId!,[...(defectGroups.get(c.defectId!)||[]),c.actual]);}
+  const uniqueDefects={labeledIds:defectGroups.size,detected:[...defectGroups.values()].filter(v=>v.includes('failed')).length,executionsWithoutDefectId:eligible.flatMap(s=>s.cases).filter(c=>c.expected==='defect'&&!c.defectId).length};
   const costs = {
     assessments: records.length,
     estimatedInference: records.filter(
@@ -392,6 +411,7 @@ export async function assuranceState(r: Runtime, id: string) {
       expectedVersion: stored?.version || 0,
     };
   const reasons: string[] = [];
+  if(policy.requireHeldOut&&(heldOut.cases<10||!heldOut.defectCases||!heldOut.cleanCases||heldOut.recall===null||heldOut.recall<policy.minRecall||heldOut.falseAlarmRate===null||heldOut.falseAlarmRate>policy.maxFalseAlarmRate||heldOut.reliability===null||heldOut.reliability<policy.minReliability))reasons.push("Reviewed held-out evidence does not meet the selected thresholds (at least ten cases, defects and clean controls).");
   if (
     measurements.cases < policy.minCases ||
     records.length < policy.minAssessments
@@ -440,6 +460,8 @@ export async function assuranceState(r: Runtime, id: string) {
       .slice(0, 10)
       .map((s) => ({ ...s, metrics: measure(s.cases) })),
     productionMetrics: measurements,
+    heldOutMetrics:heldOut,
+    uniqueDefects,
     costs,
     evidence,
     eligible: reasons.length === 0,
@@ -493,6 +515,7 @@ export async function saveAssurancePolicy(
           ? ["Costs do not meet policy or remain unknown."]
           : []),
       ];
+    if(prospective.requireHeldOut&&(state.heldOutMetrics.cases<10||!state.heldOutMetrics.defectCases||!state.heldOutMetrics.cleanCases||state.heldOutMetrics.recall===null||state.heldOutMetrics.recall<prospective.minRecall||state.heldOutMetrics.falseAlarmRate===null||state.heldOutMetrics.falseAlarmRate>prospective.maxFalseAlarmRate||state.heldOutMetrics.reliability===null||state.heldOutMetrics.reliability<prospective.minReliability))reasons.push("Qualified held-out pilot evidence is missing.");
     void original;
     for (const kind of prospective.requiredEvidence)
       if (
@@ -588,6 +611,7 @@ export async function reviewAssuranceEvidence(
   const c = await r.database.connect();
   try {
     await c.query("BEGIN");
+    await c.query("SELECT id FROM projects WHERE id=$1 FOR UPDATE", [id]);
     const row = (
       await c.query<{ author_id: string; payload: unknown }>(
         "SELECT * FROM qa_assurance_evidence WHERE project_id=$1 AND id=$2 FOR UPDATE",
@@ -654,10 +678,36 @@ export async function rolloutDecision(
         "Verified GitHub build provenance is required for this exact retained assessment.",
       );
   }
+  if (state.policy.mode === "enforced") {
+    const row = recordId ? (await r.database.query<{payload:any}>("SELECT payload FROM qa_runs WHERE project_id=$1 AND record_id=$2",[id,recordId])).rows[0] : null;
+    const frozen=recordId?(await r.database.query<{payload:any;execution_mode:string;hosted_visual_digest:string|null}>("SELECT payload,execution_mode,hosted_visual_digest FROM qa_jobs WHERE project_id=$1 AND record_id=$2 AND status='completed' ORDER BY created_at DESC LIMIT 1",[id,recordId])).rows[0]:null;
+    if(!frozen)reasons.push("A completed server-enrolled QA job is required to authorize this assessment.");
+    else if(row){
+      reasons.push(...executionEvidenceReasons(frozen.payload,row.payload));
+      const q=r.database.query.bind(r.database),current=(await q<{testing_profile:any;settings:any}>('SELECT testing_profile,settings FROM projects WHERE id=$1',[id])).rows[0];
+      if(canonical(frozen.payload.testingProfile)!==canonical(TestingProfileSchema.parse(current.testing_profile||testingDefaults))||canonical(frozen.payload.settings)!==canonical(current.settings)||canonical(frozen.payload.unitTests||[])!==canonical(await enabledUnitTests(q,id)))reasons.push('Current test/model configuration differs from this frozen assessment.');
+      const plan=await planSnapshot(q,id);if(frozen.payload.qualityPlan?frozen.payload.qualityPlan.digest!==plan.digest:plan.requirements.length||plan.brief)reasons.push('Current approved product context differs from this frozen assessment.');
+      if(frozen.execution_mode==='hosted'&&frozen.payload.testingProfile?.visualRegression&&frozen.hosted_visual_digest!==await currentVisualDigest(q,id))reasons.push('Approved visual baselines differ from this hosted assessment.');
+    }
+    const completed = Date.parse(row?.payload.completedAt || "");
+    if (!row || row.payload.phase !== "completed" || !Number.isFinite(completed) || completed > Date.now()+10000 || Date.now()-completed>3600000)
+      reasons.push("This exact assessment must be complete and less than one hour old.");
+    if (row && state.policy.requireArchiveAcknowledgment) {
+      const digest = assessmentDigest(row.payload);
+      const ack = await r.database.query("SELECT e.id FROM qa_assessment_ledger e JOIN qa_ledger_delivery d ON d.entry_id=e.id JOIN qa_ledger_connections c ON c.project_id=e.project_id WHERE e.project_id=$1 AND e.record_id=$2 AND e.event_type='assessment' AND e.payload_digest=$3 AND d.status='confirmed' AND d.destination_origin=c.origin AND d.destination_project=c.remote_project AND d.receipt->>'projectId'=c.remote_project AND d.receipt->>'payloadDigest'=e.payload_digest AND d.receipt->>'recordId'=e.record_id AND d.receipt->>'archived'='true'",[id,recordId,digest]);
+      if (!ack.rows.length) reasons.push("The configured Java archive has not acknowledged this exact assessment version.");
+    }
+    if (row && state.policy.requireRetainedEvidence) {
+      const checks = row.payload.checks.filter((c:any)=>c.required && c.method==='automated' && c.status==='passed');
+      const retained = await retainedEvidenceChecks(r,id,recordId!,row.payload);
+      if (!checks.length || checks.some((c:any)=>!retained.has(c.id))) reasons.push("Retained evidence is missing for one or more required passing checks.");
+    }
+  }
   return {
     mode: state.policy.mode,
     eligible: state.eligible,
     releaseAuthorized: state.policy.mode === "enforced" && reasons.length === 0,
     reasons,
+    policyVersion: state.policy.expectedVersion,
   };
 }

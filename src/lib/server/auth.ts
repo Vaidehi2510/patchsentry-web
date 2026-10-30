@@ -173,7 +173,6 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
   await database.query("CREATE TABLE IF NOT EXISTS qa_work_domains (project_id text PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,domain text NOT NULL,challenge text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),verified_at timestamptz)");
   await database.query("ALTER TABLE qa_work_domains ADD COLUMN IF NOT EXISTS restricted boolean NOT NULL DEFAULT false");
   await migrateEnterprise(database);
-  await migrateAssurance(database);
   // Enforce even for an email-change confirmation issued before policy activation.
   await database.query(`CREATE OR REPLACE FUNCTION qa_guard_owner_domain() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
     IF NEW.email IS DISTINCT FROM OLD.email AND EXISTS (SELECT 1 FROM projects p JOIN qa_work_domains d ON d.project_id=p.id WHERE p.owner_id=OLD.id AND d.restricted=true AND split_part(lower(NEW.email),'@',2)<>d.domain) THEN
@@ -207,5 +206,7 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
  await database.query("ALTER TABLE qa_automation_events ADD COLUMN IF NOT EXISTS admitted_at timestamptz");
  await database.query("CREATE INDEX IF NOT EXISTS qa_automation_pending_idx ON qa_automation_events(project_id,status,created_at)");
  await database.query("CREATE TABLE IF NOT EXISTS qa_weekly_reports(id text PRIMARY KEY,project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,period_start timestamptz NOT NULL,payload jsonb NOT NULL,email_status text NOT NULL DEFAULT 'disabled',email_claimed_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(project_id,period_start))");
+
+ await migrateAssurance(database);
 
 }

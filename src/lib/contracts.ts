@@ -199,7 +199,7 @@ export type Project = {
   testingProfile?: TestingProfile;
   runner?: Runner | null;
 };
-export type Run = RunInput & { score: Score; receivedAt: string };
+export type Run = RunInput & { score: Score; receivedAt: string; executionEvidence?: {status:"verified"|"blocked"|"imported";reasons:string[]} };
 export type CatalogModel = {
   id: string;
   name: string;

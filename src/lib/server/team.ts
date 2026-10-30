@@ -43,10 +43,19 @@ export async function acceptInvite(database: Database, user: {id:string;name:str
   } catch(e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
 }
 export async function removeMember(database:Database,projectId:string,actor:string,role:AccessRole,userId:string) {
-  const result=await database.query('DELETE FROM qa_members WHERE project_id=$1 AND user_id=$2 AND ($3=true OR role<>\'admin\') RETURNING user_id',[projectId,userId,role==='owner']);
-  if (!result.rows.length) throw new JobError(404,'Member not found or only the owner can remove this admin.');
-  await audit(database.query.bind(database),projectId,actor,'member.removed',userId); return {removed:true};
+ const c=await database.connect();try{await c.query('BEGIN');await c.query('SELECT id FROM projects WHERE id=$1 FOR UPDATE',[projectId]);
+ const result=await c.query('DELETE FROM qa_members WHERE project_id=$1 AND user_id=$2 AND ($3=true OR role<>\'admin\') RETURNING user_id',[projectId,userId,role==='owner']);
+ if(!result.rows.length)throw new JobError(404,'Member not found or only the owner can remove this admin.');
+ // A still-active directory row must not silently regrant membership at the next
+ // password login. An authorized directory reactivation is a separate action.
+ await c.query('UPDATE qa_directory_users SET active=false,updated_at=now() WHERE project_id=$1 AND email IN(SELECT lower(email) FROM "user" WHERE id=$2)',[projectId,userId]);
+ await c.query('UPDATE qa_sso_identities SET active=false WHERE project_id=$1 AND user_id=$2',[projectId,userId]);
+ await c.query('DELETE FROM qa_invites WHERE project_id=$1 AND lower(email) IN(SELECT lower(email) FROM "user" WHERE id=$2)',[projectId,userId]);
+ await c.query('DELETE FROM "session" WHERE id IN(SELECT s.session_id FROM qa_sso_sessions s JOIN "session" a ON a.id=s.session_id WHERE s.project_id=$1 AND a."userId"=$2)',[projectId,userId]);
+ await audit(c.query.bind(c),projectId,actor,'member.removed',userId);await c.query('COMMIT');return {removed:true};
+ }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
 }
+
 export async function queueNotification(q:Database['query'],projectId:string,event:string,key:string,payload:Record<string,unknown>) {
   if(await restrictedDomain(q,projectId))return;
   const project=(await q<{slack_settings:unknown}>('SELECT slack_settings FROM projects WHERE id=$1',[projectId])).rows[0];

@@ -37,6 +37,7 @@ export default function DocsPage() {
           <a href="#workspace">Connect a workspace</a>
           <a href="#teams">Team roles & Slack</a>
           <a href="#recording">Recording & worker fleets</a>
+          <a href="#enterprise-rollout">Pilot, release gates & Ledger</a>
           <a href="#next">Go further</a>
           <div>
             <BookOpen size={18} />
@@ -47,6 +48,7 @@ export default function DocsPage() {
           </div>
         </aside>
         <div className="docs-content">
+          <section id="enterprise-rollout"><span className="eyebrow">SUPPORTED ROUTINE QA</span><h2>Qualify your product before enforcing releases.</h2><p>Connect your repository and disposable preview, select a model, approve requirements and define observable UI/API outcomes. Automatic events freeze those inputs and retain the configured regression checks. In Product QA, you can enable automatic candidate-defect reporting; infrastructure failures remain untested work.</p><p>Use <strong>Pilot &amp; Ledger</strong> to register known defects and clean controls before execution, separate held-out cases, and measure detection, false alarms, reliability and cost. Record the same workload’s setup, maintenance, triage, approval and execution time for a meaningful human-work comparison. Estimates never establish savings.</p><p>Start in advisory mode. The owner can require qualified held-out results, retained exact-version evidence and acknowledgment from an optional Java archive before release. The hosted Ledger works without Java deployment and records assessment versions, approved changes and decisions. Retrieve the assessment’s history and follow earlier pages for retained evidence references.</p><p>Hosted execution currently has shared pilot limits of eight assessments per month and two active globally. Real Entra/AWS validation, enterprise capacity, production recovery and an independent security assessment require their own authorized evidence. Configuration or synthetic success does not qualify those claims.</p><p>Company report delivery policies still apply. Dashboard-only reporting does not prevent source/context from reaching an explicitly selected model or authorized cloud execution provider. See <Link href="/security">security boundaries</Link> and <Link href="/architecture">the integration architecture</Link>.</p></section>
           <section id="architecture">
             <span className="eyebrow">01 / THE ARCHITECTURE</span>
             <h2>A website and managed QA workers.</h2>

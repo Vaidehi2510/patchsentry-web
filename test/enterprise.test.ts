@@ -80,6 +80,7 @@ test('SCIM is project scoped, supports Entra filters and deactivation, cannot gr
  assert.equal((await directory('/Users/'+user.id,'PATCH',{Operations:[{op:'Replace',path:'active',value:false}]})).status,200);
  assert.equal((await api('/api/projects/'+project,'GET',undefined,member)).status,404);
  assert.equal((await directory('/Users/'+user.id,'PUT',{userName:'changed@company.test',active:true})).status,409);
+ assert.equal((await directory('/Users/'+user.id,'PATCH',{Operations:[{op:'Replace',path:'externalId',value:'different-person'},{op:'Replace',path:'active',value:true}]})).status,409);
  assert.equal((await directory('/Users/'+user.id,'PATCH',{Operations:[{op:'Replace',path:'active',value:true}]})).status,200);
  assert.equal((await api('/api/projects/'+project,'GET',undefined,member)).status,200);
  assert.equal((await directory('/Users/'+user.id,'DELETE')).status,204);
@@ -129,4 +130,17 @@ test('AWS Device Farm is opt-in, bounded, project scoped, deduplicated and repor
  passed=true;const green=await(await api(root+'/runs/'+id,'POST',{})).json();assert.equal(green.result.status,'passed');assert.equal(green.result.tests,2);assert.equal(green.result.limitations.length,3);
  assert.equal((await api(root+'/runs','POST',{...request,idempotencyKey:randomUUID()})).status,409);assert.equal(schedules,1);
  assert.equal((await api('/api/devicefarm/'+project+'/ci','POST',request,'')).status,403,'automatic paid testing stays disabled');
+});
+
+test('manual offboarding cannot be silently undone by directory membership sync on the next request',async()=>{
+ const {removeMember}=await import('../src/lib/server/team');const {syncDirectoryMembership}=await import('../src/lib/server/directory');
+ const state=await runtime.auth.api.getSession({headers:new Headers({cookie:member})});assert.ok(state);const uid=state.user.id;
+ // Reactivate the same known fixture person to establish active directory membership.
+ await runtime.database.query('UPDATE qa_directory_users SET active=true WHERE project_id=$1 AND email=$2',[project,'member@company.test']);
+ await runtime.database.query('UPDATE qa_sso_identities SET active=true WHERE project_id=$1 AND user_id=$2',[project,uid]);
+ await syncDirectoryMembership(runtime.database.query.bind(runtime.database),uid);
+ await removeMember(runtime.database,project,'Owner fixture','owner',uid);
+ await syncDirectoryMembership(runtime.database.query.bind(runtime.database),uid);
+ assert.equal((await runtime.database.query('SELECT user_id FROM qa_members WHERE project_id=$1 AND user_id=$2',[project,uid])).rows.length,0);
+ assert.equal((await api('/api/projects/'+project,'GET',undefined,member)).status,404);
 });
