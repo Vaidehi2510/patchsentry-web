@@ -71,3 +71,5 @@ identity, cloud enterprise capacity and billing, production backup restore,
 independent penetration assessment, real customer held-out defect recall, live
 email/Slack delivery and model diagnosis quality require authorized external
 accounts/evidence. Saving configuration is never counted as validating them.
+
+Production code revision `37e9fbad475dae4a7d4df2c1abfbc6b18b2908bb` deployed successfully to https://patchsentry.vercel.app after excluding the local-only fixture harnesses from the production source package. Its GitHub CI passed. Read-only production probes returned 200 for home/docs and 401 for unauthenticated Ledger history/operator health. No customer account, live QA execution or notification was triggered by these probes.

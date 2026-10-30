@@ -58,3 +58,5 @@ live. The packaging correction excludes only the two development fixture scripts
 CI still type-checks them and application type checking remains enforced. Retry
 the existing deployment with the corrected source package; no customer data rollback
 or destructive migration is needed.
+
+Release completed: production code revision `37e9fbad475dae4a7d4df2c1abfbc6b18b2908bb` is Ready at https://patchsentry.vercel.app (deployment `patchsentry-rk8jg7uhl-vaidehipandya-3024s-projects.vercel.app`). Its GitHub CI passed, as did engine CI. Public home/docs returned 200; new rollout documentation was present; unauthenticated Ledger history and operator health returned 401. New controls remain opt-in. Local preview and fixture containers were stopped/removed. This final checkpoint update changes documentation only.

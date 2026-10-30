@@ -150,5 +150,18 @@
     "production backup restore and operational ownership",
     "independent security assessment"
   ],
-  "readinessDecision": "controlled advisory pilot; no general enterprise QA replacement claim"
+  "readinessDecision": "controlled advisory pilot; no general enterprise QA replacement claim",
+  "deployment": {
+    "productionCodeRevision": "37e9fbad475dae4a7d4df2c1abfbc6b18b2908bb",
+    "productionUrl": "https://patchsentry.vercel.app",
+    "deployment": "patchsentry-rk8jg7uhl-vaidehipandya-3024s-projects.vercel.app",
+    "state": "READY",
+    "codeCi": "passed",
+    "publicHome": 200,
+    "publicDocs": 200,
+    "newRolloutDocsPresent": true,
+    "unauthenticatedLedgerHistory": 401,
+    "unauthenticatedOperatorHealth": 401,
+    "productionCustomerDataTesting": false
+  }
 }
