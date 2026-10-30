@@ -1,3 +1,4 @@
+import { matchesDomain } from "./domain-policy";
 import { z } from "zod";
 import type { Runtime } from "./runtime";
 import {
@@ -191,6 +192,8 @@ export async function accountEndpoint(
         .strict(),
       body,
     );
+    const ownedDomains=(await runtime.database.query<{domain:string}>('SELECT d.domain FROM qa_work_domains d JOIN projects p ON p.id=d.project_id WHERE p.owner_id=$1 AND d.restricted=true',[user.id])).rows;
+    if(ownedDomains.some(d=>!matchesDomain(input.newEmail,d.domain)))throw new SecurityError(409,"Your email must match the verified domain of every restricted project you own. Disable the domain restriction first if you need to change organizations.");
     const verified = await authCall(request, runtime, "/verify-password", {
       password: input.password,
     });

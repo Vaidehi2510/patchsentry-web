@@ -386,8 +386,7 @@ export function AccountSettings({
             </h2>
             <p>
               Invite-only membership keeps company information private. A
-              verified work domain identifies a workspace; it does not enable
-              SSO or give everyone at that domain access.
+              verified work domain can restrict a project to invited members with matching verified email addresses. It does not give everyone at that domain access.
             </p>
           </div>
         </div>
@@ -424,6 +423,8 @@ export function AccountSettings({
   );
 }
 function WorkDomain({ project, demo }: { project: Project; demo: boolean }) {
+  const [incompatible, setIncompatible] = useState<Array<{id:string;email:string}>>([]);
+  const isOwner=(project.accessRole || "owner")==="owner";
   const [domain, setDomain] = useState<any>(null),
     [value, setValue] = useState(""),
     [error, setError] = useState(""),
@@ -435,6 +436,7 @@ function WorkDomain({ project, demo }: { project: Project; demo: boolean }) {
       call(root)
         .then((d) => {
           setDomain(d.domain);
+          setIncompatible(d.incompatibleMembers || []);
           setValue(d.domain?.name || "");
         })
         .catch((e) => setError(e.message));
@@ -450,12 +452,13 @@ function WorkDomain({ project, demo }: { project: Project; demo: boolean }) {
     try {
       const d = await call(
         kind === "verify" ? root + "/verify" : root,
-        kind === "remove" ? "DELETE" : "POST",
-        kind === "save" ? { domain: value } : {},
+        kind === "remove" ? "DELETE" : kind === "restrict" || kind === "unrestrict" ? "PATCH" : "POST",
+        kind === "save" ? { domain: value } : kind === "restrict" || kind === "unrestrict" ? {restricted:kind==="restrict"} : {},
       );
       setDomain(d.domain || null);
+      setIncompatible(d.incompatibleMembers || []);
       setMessage(
-        kind === "verify"
+        kind === "restrict" ? "Domain restrictions enabled. Results stay in the authenticated dashboard." : kind === "unrestrict" ? "Domain restrictions disabled. Project membership still requires an invitation." : kind === "verify"
           ? "Domain verified. Membership still requires an invitation."
           : kind === "remove"
             ? "Domain association removed."
@@ -469,12 +472,12 @@ function WorkDomain({ project, demo }: { project: Project; demo: boolean }) {
   }
   return (
     <details className="work-domain">
-      <summary>Work domain for {project.name}</summary>
+      <summary>Company access & domain for {project.name}</summary>
       <p>
         Use a domain whose DNS you administer. Your private workspace is{" "}
         <Link href={`/app?project=${project.id}`}>{project.name}</Link>.
         Verifying a domain grants no GitHub permissions and does not enable
-        automatic joining.
+        automatic joining. Your DNS administrator must add the TXT record. Only the project owner can change this policy, after recent MFA verification.
       </p>
       <form
         onSubmit={(e) => {
@@ -489,10 +492,11 @@ function WorkDomain({ project, demo }: { project: Project; demo: boolean }) {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder="example.com"
+            disabled={!isOwner || domain?.restricted}
             maxLength={253}
           />
         </label>
-        <button className="button button-secondary" disabled={busy}>
+        <button className="button button-secondary" disabled={busy || !isOwner || domain?.restricted}>
           Create DNS verification record
         </button>
       </form>
@@ -521,14 +525,20 @@ function WorkDomain({ project, demo }: { project: Project; demo: boolean }) {
             </p>
             <button
               className="button button-secondary"
-              disabled={busy}
+              disabled={busy || !isOwner}
               onClick={() => action("verify")}
             >
               Check DNS verification
             </button>
+            <h3>{domain.restricted ? "Domain restriction active" : "Restrict project access"}</h3>
+            <p>When enabled, every member must have a verified email at <strong>@{domain.name}</strong>. Subdomains are separate domains. Membership and roles apply to this project only. Outside accounts cannot open its reports, evidence, exports or weekly summaries, even with an old session.</p>
+            <p>QA reports stay in the dashboard. Email and Slack report delivery is blocked, including queued messages. Invitations may still be emailed to matching addresses. Previously downloaded or delivered copies cannot be recalled.</p>
+            <details><summary>SSO and trusted integrations</summary><p>Company sign-in through Microsoft Entra, Google Workspace or another identity provider is a separate SSO integration and is not enabled by DNS verification. Existing project service credentials and approved AI providers remain authorized; review them before adding sensitive product data.</p></details>
+            {!domain.restricted && incompatible.length>0 && <div role="status"><strong>Update these members before enabling:</strong><ul>{incompatible.map(m=><li key={m.id}>{m.email}</li>)}</ul><Link href={`/app?project=${project.id}&tab=team`}>Manage project members →</Link><p>The owner must also use a matching verified address. You can change your email in My account.</p></div>}
+            <button className="button button-primary" disabled={busy || !isOwner || !domain.verifiedAt || !domain.restricted && incompatible.length>0} onClick={()=>{if(window.confirm(domain.restricted ? "Allow invited external accounts again? Reports still require project membership." : "Restrict this project to @"+domain.name+"? Outside invitations will be revoked and outbound QA reports disabled."))action(domain.restricted?"unrestrict":"restrict");}}>{domain.restricted ? "Turn off domain restriction" : "Require @"+domain.name+" membership"}</button>
             <button
               className="text-button"
-              disabled={busy}
+              disabled={busy || !isOwner || domain.restricted}
               onClick={() => {
                 if (confirm("Remove this workspace’s domain association?"))
                   action("remove");

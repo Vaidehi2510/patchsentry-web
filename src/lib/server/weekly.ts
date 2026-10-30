@@ -5,6 +5,7 @@ import {automationPolicy} from './automation';
 import {planSnapshot,requirementCoverage,policyFor} from './quality';
 import {audit,queueNotification} from './team';
 import {SlackSettingsSchema,slackDefaults} from '../team';
+import {restrictedDomain} from './domain-policy';
 import {JobError} from './jobs';
 
 export function lastCompletedWeek(now=new Date()){
@@ -29,6 +30,7 @@ export async function generateWeeklyReport(runtime:Runtime,id:string,now=new Dat
  await audit(q,id,'Weekly report','report.generated',period.start.toISOString());return inserted;
 }
 export async function deliverWeekly(runtime:Runtime,id:string,reportId:string){
+ if(await restrictedDomain(runtime.database.query.bind(runtime.database),id))return;
  const policy=await automationPolicy(runtime,id),q=runtime.database.query.bind(runtime.database);const row=(await q<{payload:any}>('SELECT payload FROM qa_weekly_reports WHERE project_id=$1 AND id=$2',[id,reportId])).rows[0];if(!row)throw new JobError(404,'Weekly report not found.');const r=row.payload,url=runtime.config.origin+'/app?tab=automation&project='+id;
  if(policy.weeklySlack){const project=(await q<{slack_settings:unknown}>('SELECT slack_settings FROM projects WHERE id=$1',[id])).rows[0];const slack=SlackSettingsSchema.parse(project.slack_settings||slackDefaults);if(slack.enabled)await q("INSERT INTO qa_notifications(id,project_id,event_key,payload) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT(project_id,event_key) DO NOTHING",[randomUUID(),id,'weekly:'+reportId,JSON.stringify({event:'completed',channelId:slack.channelId,jobId:'weekly:'+reportId,repository:r.repository,weeklyReportId:reportId,result:'weekly report',message:`${r.periodStart.slice(0,10)}–${r.periodEnd.slice(0,10)}: ${r.execution.assessments} assessments, ${r.execution.failed} failed checks, ${r.unresolvedRisks.length} unresolved risks.`,reportUrl:url})]);}
 

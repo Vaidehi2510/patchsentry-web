@@ -6,6 +6,9 @@ import { handleRequest } from "../src/lib/server/api";
 import { cookieJar, totp } from "./auth-session";
 import { invitationEmail } from "../src/lib/server/email";
 import type { Runtime } from "../src/lib/server/runtime";
+import { randomUUID, createHash } from 'node:crypto';
+import { claimNotification, queueNotification } from '../src/lib/server/team';
+import { generateWeeklyReport, deliverWeekly } from '../src/lib/server/weekly';
 const mailCodes = new Map<string, string>();
 const links = new Map<string, string>(),
   invitations: any[] = [],
@@ -567,4 +570,76 @@ test("role editing never grants owner access or lets admins change other admins"
       .status,
     403,
   );
+});
+
+test('domain restrictions isolate reports and invitations, including existing sessions and outbound delivery', async () => {
+  const created=await api('/api/projects','POST',{name:'Domain restricted fixture',repository:'fixture/domain-product'});
+  assert.equal(created.status,201,await created.clone().text());
+  const id=(await created.json()).project.id,root=`/api/projects/${id}`,domain=root+'/domain';
+  // Current member with another address must be resolved before activation.
+  await runtime.database.query('INSERT INTO qa_members(project_id,user_id,role) VALUES($1,$2,$3)',[id,accounts.qa.id,'qa']);
+  await runtime.database.query('UPDATE "user" SET email=$2 WHERE id=$1',[accounts.qa.id,'qa@outside.test']);
+  const pending=await(await api(root+'/team','POST',{email:'external@outside.test',role:'viewer'})).json();
+  const configured=await(await api(domain,'POST',{domain:'example.test'})).json();
+  assert.equal((await api(domain,'PATCH',{restricted:true})).status,409);
+  runtime.domainResolve=async()=>[[configured.domain.recordValue]];
+  const verified=await(await api(domain+'/verify','POST',{})).json();
+  assert.equal(verified.incompatibleMembers[0].email,'qa@outside.test');
+  assert.equal((await api(domain,'PATCH',{restricted:true})).status,409);
+  await runtime.database.query('UPDATE "user" SET email=$2 WHERE id=$1',[accounts.qa.id,'qa@example.test']);
+  // A previously issued notification must not be claimed after restriction.
+  await api(root+'/slack','PATCH',{enabled:true,channelId:'C0123456789',events:['completed']});
+  await queueNotification(runtime.database.query.bind(runtime.database),id,'completed','fixture:queued',{jobId:'fixture',message:'Private result'});
+  const enabled=await api(domain,'PATCH',{restricted:true});
+  assert.equal(enabled.status,200,await enabled.clone().text());
+  assert.equal((await enabled.json()).domain.restricted,true);
+  assert.equal((await runtime.database.query('SELECT token_hash FROM qa_invites WHERE token_hash=$1',[createHash('sha256').update(pending.token).digest('hex')])).rows.length,0);
+  assert.equal((await api(domain,'DELETE',{})).status,409);
+  assert.equal((await api(domain,'POST',{domain:'other.test'})).status,409);
+  assert.equal((await api(root+'/team','POST',{email:'external@outside.test',role:'viewer'})).status,403);
+  assert.equal((await api(root+'/team','POST',{email:'external@sub.example.test',role:'viewer'})).status,403);
+  assert.equal((await api(root+'/team','POST',{email:'external@example.test.attacker.test',role:'viewer'})).status,403);
+  // A same-domain user still needs a project-specific invitation.
+  assert.equal((await api(root,'GET',undefined,'outsider')).status,404);
+  const invite=await(await api(root+'/team','POST',{email:'outsider@example.test',role:'viewer'})).json();
+  assert.equal((await api('/api/invitations/accept','POST',{token:invite.token},'outsider')).status,200);
+  assert.equal((await api(root,'GET',undefined,'outsider')).status,200);
+  assert.equal((await api(root+'/jobs','POST',{},'outsider')).status,403);
+  assert.equal((await api(domain,'PATCH',{restricted:false},'qa')).status,403);
+  await runtime.database.query('INSERT INTO qa_members(project_id,user_id,role) VALUES($1,$2,$3)',[id,accounts.admin.id,'admin']);
+  assert.equal((await api(domain,'PATCH',{restricted:false},'admin')).status,403);
+  assert.equal((await api(domain,'GET',undefined,'admin')).status,200);
+  // Database identity is checked on every request, even with an existing session.
+  await runtime.database.query('UPDATE "user" SET email=$2 WHERE id=$1',[accounts.qa.id,'qa@outside.test']);
+  const hiddenPaths=[root,root+'/runs',root+'/weekly-reports',root+'/requirements',root+'/audit-export',root+'/evidence/'+randomUUID(),root+'/team'];
+  for(const path of hiddenPaths)assert.equal((await api(path,'GET',undefined,'qa')).status,404,path);
+  assert.ok(!(await(await api('/api/projects','GET',undefined,'qa')).json()).projects.some((p:any)=>p.id===id));
+  await runtime.database.query('UPDATE "user" SET email=$2 WHERE id=$1',[accounts.qa.id,'qa@example.test']);
+  await runtime.database.query('UPDATE "user" SET "emailVerified"=false WHERE id=$1',[accounts.qa.id]);
+  assert.notEqual((await api(root,'GET',undefined,'qa')).status,200);
+  await runtime.database.query('UPDATE "user" SET "emailVerified"=true WHERE id=$1',[accounts.qa.id]);
+  assert.equal((await api(root,'GET',undefined,'qa')).status,200);
+  // Prevent an older outstanding email-change link from stranding the owner.
+  await assert.rejects(runtime.database.query('UPDATE "user" SET email=$2 WHERE id=$1',[accounts.owner.id,'owner@outside.test']),/domain restriction/);
+  assert.equal((await api(root+'/slack','PATCH',{enabled:true,channelId:'C0123456789',events:['completed']})).status,403);
+  assert.equal((await claimNotification(runtime.database,id,{channelId:'C0123456789'})).notification,null);
+  await queueNotification(runtime.database.query.bind(runtime.database),id,'completed','fixture:blocked',{jobId:'fixture'});
+  assert.equal((await runtime.database.query('SELECT id FROM qa_notifications WHERE project_id=$1',[id])).rows.length,1);
+  let emails=0;runtime.config.sendWeeklyReport=async()=>{emails++;};
+  await runtime.database.query('INSERT INTO qa_automation_settings(project_id,payload) VALUES($1,$2::jsonb)',[id,JSON.stringify({weeklyEmail:true,weeklySlack:true})]);
+  const weekly=await generateWeeklyReport(runtime,id);
+  await deliverWeekly(runtime,id,String(weekly.id));
+  assert.equal(emails,0);
+  assert.equal((await runtime.database.query('SELECT id FROM qa_notifications WHERE project_id=$1',[id])).rows.length,1);
+  assert.equal((await api(root+'/weekly-reports','GET',undefined,'outsider')).status,200);
+  // Outside invitations that predate the policy cannot be accepted, even if retained.
+  const token='z'.repeat(43);
+  await runtime.database.query('INSERT INTO qa_invites(token_hash,project_id,email,role,expires_at) VALUES($1,$2,$3,$4,now()+interval \'1 day\')',[createHash('sha256').update(token).digest('hex'),id,'qa@outside.test','viewer']);
+  await runtime.database.query('UPDATE "user" SET email=$2 WHERE id=$1',[accounts.qa.id,'qa@outside.test']);
+  assert.equal((await api('/api/invitations/preview','POST',{token},'qa')).status,403);
+  assert.equal((await api('/api/invitations/accept','POST',{token},'qa')).status,403);
+  await runtime.database.query('UPDATE "user" SET email=$2 WHERE id=$1',[accounts.qa.id,'qa@example.test']);
+  assert.equal((await api(domain,'PATCH',{restricted:false})).status,200);
+  assert.equal((await api(root+'/team','POST',{email:'external@outside.test',role:'viewer'})).status,201);
+  assert.equal((await api(domain,'DELETE',{})).status,200);
 });

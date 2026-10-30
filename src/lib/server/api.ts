@@ -12,7 +12,8 @@ import {verifyRepository,repositoryProof} from './repository-authorization';
 import {PolicySchema} from '../quality';
 import {revokeDevices} from './trusted-devices';
 import {accountEndpoint} from './account';
-import {domainState,configureDomain,verifyDomain} from './work-domain';
+import {domainReadiness,configureDomain,verifyDomain,setDomainRestriction} from './work-domain';
+import {domainAllowsUser,restrictedDomain,requireDomainEmail} from './domain-policy';
 import {securityState, securityEndpoint, credentialExists, passwordSignIn, authCall, securitySignOut, resetWithMfa, setupRequestLimit, rate, SecurityError} from './session-security';
 import {modelConnections,requestModelSetup,claimModelSetup,completeModelSetup} from './model-connection';
 import { roleRank, SlackSettingsSchema, slackDefaults, type AccessRole } from '../team';
@@ -208,7 +209,7 @@ async function accessibleProject(
     `SELECT p.*,CASE WHEN p.owner_id=$2 THEN 'owner' ELSE m.role END AS access_role FROM projects p LEFT JOIN qa_members m ON m.project_id=p.id AND m.user_id=$2 WHERE p.id=$1 AND (p.owner_id=$2 OR m.user_id IS NOT NULL)`,
     [id, ownerId],
   );
-  if (!result.rows[0]) throw new ApiError(404, "Project not found.");
+  if (!result.rows[0] || !await domainAllowsUser(runtime.database.query.bind(runtime.database),id,ownerId)) throw new ApiError(404, "Project not found.");
   if (roleRank[result.rows[0].access_role || "owner"] < roleRank[minimum]) throw new ApiError(403, "Your project role does not allow this action.");
   return result.rows[0];
 }
@@ -228,6 +229,7 @@ async function agentProject(
   );
   if (!result.rows[0])
     throw new ApiError(401, "A valid project agent token is required.");
+  if (!await domainAllowsUser(runtime.database.query.bind(runtime.database),result.rows[0].id,result.rows[0].owner_id)) throw new ApiError(401, "Project owner must meet its verified domain policy.");
   return result.rows[0];
 }
 async function validateSettings(
@@ -477,17 +479,25 @@ async function dispatch(
   const attachments=/^\/api\/projects\/([a-f0-9-]{36})\/runs\/([a-f0-9]{64})\/evidence$/.exec(path);
   if(attachments&&request.method==='GET'){const p=await accessibleProject(runtime,attachments[1],user.id);return json(await evidenceList(runtime,p.id,attachments[2]));}
   const domainMatch=/^\/api\/projects\/([a-f0-9-]{36})\/domain(?:\/(verify))?$/.exec(path);
-  if(domainMatch){const p=await accessibleProject(runtime,domainMatch[1],user.id,'admin');if(request.method==='GET'&&!domainMatch[2])return json(await domainState(runtime,p.id));if(request.method==='POST')return json(domainMatch[2]?await verifyDomain(runtime,p.id):await configureDomain(runtime,p.id,await readBody(request)));if(request.method==='DELETE'&&!domainMatch[2]){await runtime.database.query('DELETE FROM qa_work_domains WHERE project_id=$1',[p.id]);return json({removed:true});}throw new ApiError(405,'Method not allowed.');}
+  if(domainMatch){
+    const p=await accessibleProject(runtime,domainMatch[1],user.id,request.method==='GET'?'admin':'owner');
+    if(request.method==='GET'&&!domainMatch[2])return json(await domainReadiness(runtime,p.id));
+    const security=await securityState(request,runtime);
+    if(!security.proof?.mfa_verified_at || Date.now()-Date.parse(security.proof.mfa_verified_at)>15*60000)throw new ApiError(403,'Verify MFA for account changes before changing the domain policy.');
+    if(request.method==='PATCH'&&!domainMatch[2])return json(await setDomainRestriction(runtime,p.id,await readBody(request),user.name));
+    if(request.method==='POST'){const result=domainMatch[2]?await verifyDomain(runtime,p.id):await configureDomain(runtime,p.id,await readBody(request));await audit(runtime.database.query.bind(runtime.database),p.id,user.name,domainMatch[2]?'domain.verified':'domain.configured',result.domain?.name || '');return json(result);}
+    if(request.method==='DELETE'&&!domainMatch[2]){if(await restrictedDomain(runtime.database.query.bind(runtime.database),p.id))throw new ApiError(409,'Turn off domain restrictions before removing this domain.');const removed=await runtime.database.query('DELETE FROM qa_work_domains WHERE project_id=$1 AND restricted=false RETURNING project_id',[p.id]);if(!removed.rows.length)throw new ApiError(409,'Domain changed; reload before removing it.');await audit(runtime.database.query.bind(runtime.database),p.id,user.name,'domain.removed','Domain association removed.');return json({removed:true});}throw new ApiError(405,'Method not allowed.');
+  }
   const modelSetup=/^\/api\/projects\/([a-f0-9-]{36})\/model-connections$/.exec(path);
   if(modelSetup){const project=await accessibleProject(runtime,modelSetup[1],user.id,request.method==='GET'?'viewer':'admin');if(request.method==='GET')return json(await modelConnections(runtime,project.id));if(request.method==='POST')return json(await requestModelSetup(runtime,project.id,await readBody(request)),201);throw new ApiError(405,'Method not allowed.');}
-  if(path==='/api/invitations/preview'&&request.method==='POST'){const input=parse(z.object({token:z.string().regex(/^[A-Za-z0-9_-]{43}$/)}).strict(),await readBody(request));const row=(await runtime.database.query('SELECT p.name,i.role,i.email FROM qa_invites i JOIN projects p ON p.id=i.project_id WHERE i.token_hash=$1 AND i.expires_at>now() AND lower(i.email)=lower($2)',[hashToken(input.token),user.email])).rows[0];if(!row)throw new ApiError(404,'This invitation is unavailable for your verified email. Sign in with the invited address or ask for a new invitation.');return json({invitation:row});}
+  if(path==='/api/invitations/preview'&&request.method==='POST'){const input=parse(z.object({token:z.string().regex(/^[A-Za-z0-9_-]{43}$/)}).strict(),await readBody(request));const row=(await runtime.database.query('SELECT p.id,p.name,i.role,i.email FROM qa_invites i JOIN projects p ON p.id=i.project_id WHERE i.token_hash=$1 AND i.expires_at>now() AND lower(i.email)=lower($2)',[hashToken(input.token),user.email])).rows[0];if(!row)throw new ApiError(404,'This invitation is unavailable for your verified email. Sign in with the invited address or ask for a new invitation.');await requireDomainEmail(runtime.database.query.bind(runtime.database),String(row.id),user.email);return json({invitation:row});}
   if (path === "/api/invitations/accept" && request.method === "POST") return json(await acceptInvite(runtime.database,user,await readBody(request)));
   const teamMatch = /^\/api\/projects\/([a-f0-9-]{36})\/(team|activity|fleet|slack)(?:\/([A-Za-z0-9_-]{1,100}))?$/.exec(path);
   if (teamMatch) {
     const area=teamMatch[2], action=teamMatch[3];
     const project=await accessibleProject(runtime,teamMatch[1],user.id,request.method==='GET' ? 'viewer' : 'admin');
     const role=project.access_role || 'owner';
-    if(area==='team' && request.method==='GET') return json({members:await members(runtime.database,project.id),role,pending:(await runtime.database.query("SELECT 'invite-'||token_hash AS id,email,role,expires_at,delivery_status FROM qa_invites WHERE project_id=$1 AND expires_at>now() ORDER BY email",[project.id])).rows});
+    if(area==='team' && request.method==='GET') return json({domainPolicy:await restrictedDomain(runtime.database.query.bind(runtime.database),project.id),members:await members(runtime.database,project.id),role,pending:(await runtime.database.query("SELECT 'invite-'||token_hash AS id,email,role,expires_at,delivery_status FROM qa_invites WHERE project_id=$1 AND expires_at>now() ORDER BY email",[project.id])).rows});
     if(area==='team' && !action && request.method==='POST') {await rate(runtime,'invitation:'+project.id,10);const invitation=await invite(runtime.database,project.id,user.name,role,await readBody(request));let delivery='unavailable';if(runtime.config.sendInvitation){try{await runtime.config.sendInvitation({email:invitation.email,url:runtime.config.origin+'/invite#token='+invitation.token,projectName:project.name,inviter:user.name,role:invitation.role});delivery='accepted';}catch{delivery='unconfirmed';}}await runtime.database.query('UPDATE qa_invites SET delivery_status=$3 WHERE project_id=$1 AND token_hash=$2',[project.id,hashToken(invitation.token),delivery]);return json({...invitation,delivery},201);}
     if(area==='team' && action && !action.startsWith('invite-') && request.method==='PATCH')return json(await changeMemberRole(runtime.database,project.id,user.name,role,action,await readBody(request)));
     if(area==='team' && action && request.method==='DELETE') {
@@ -498,7 +508,7 @@ async function dispatch(
     if(area==='fleet' && request.method==='GET') return json({maxParallel:project.max_parallel || 1,runners:(await runtime.database.query('SELECT id,payload,last_seen,(SELECT count(*) FROM qa_jobs j WHERE j.project_id=r.project_id AND j.runner_id=r.id AND j.status=\'running\') AS active FROM qa_runners r WHERE project_id=$1 ORDER BY last_seen DESC',[project.id])).rows});
     if(area==='fleet' && request.method==='PATCH') {const input=parse(z.object({maxParallel:z.number().int().min(1).max(8)}).strict(),await readBody(request));await runtime.database.query('UPDATE projects SET max_parallel=$2 WHERE id=$1',[project.id,input.maxParallel]);await audit(runtime.database.query.bind(runtime.database),project.id,user.name,'fleet.capacity',String(input.maxParallel));return json(input);}
     if(area==='slack' && request.method==='GET') return json({settings:project.slack_settings || slackDefaults,deliveries:(await runtime.database.query('SELECT id,event_key,status,created_at,slack_ts FROM qa_notifications WHERE project_id=$1 ORDER BY created_at DESC LIMIT 30',[project.id])).rows});
-    if(area==='slack' && request.method==='PATCH') {const input=parse(SlackSettingsSchema,await readBody(request));await runtime.database.query('UPDATE projects SET slack_settings=$2::jsonb WHERE id=$1',[project.id,JSON.stringify(input)]);await audit(runtime.database.query.bind(runtime.database),project.id,user.name,'slack.settings',input.enabled ? input.channelId : 'Disabled');return json({settings:input});}
+    if(area==='slack' && request.method==='PATCH') {const input=parse(SlackSettingsSchema,await readBody(request));if(input.enabled&&await restrictedDomain(runtime.database.query.bind(runtime.database),project.id))throw new ApiError(403,'Slack report delivery is disabled for domain-restricted projects. Read results in the authenticated dashboard.');await runtime.database.query('UPDATE projects SET slack_settings=$2::jsonb WHERE id=$1',[project.id,JSON.stringify(input)]);await audit(runtime.database.query.bind(runtime.database),project.id,user.name,'slack.settings',input.enabled ? input.channelId : 'Disabled');return json({settings:input});}
     throw new ApiError(405,'Method not allowed.');
   }
   if (path === "/api/projects") {
@@ -507,7 +517,8 @@ async function dispatch(
         `SELECT p.*,CASE WHEN p.owner_id=$1 THEN 'owner' ELSE m.role END AS access_role FROM projects p LEFT JOIN qa_members m ON m.project_id=p.id AND m.user_id=$1 WHERE p.owner_id=$1 OR m.user_id IS NOT NULL ORDER BY p.created_at DESC`,
         [user.id],
       );
-      return json({ projects: result.rows.map(projectView) });
+      const allowed=[];for(const p of result.rows)if(await domainAllowsUser(runtime.database.query.bind(runtime.database),p.id,user.id))allowed.push(p);
+      return json({ projects: allowed.map(projectView) });
     }
     if (request.method === "POST") {
       const setupState=await securityState(request,runtime);if(!setupState.proof?.mfa_verified)throw new ApiError(403,'Creating a project makes you its owner. Verify your second factor in My account first.');

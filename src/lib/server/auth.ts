@@ -168,6 +168,16 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
   await database.query("ALTER TABLE qa_auth_proofs ADD COLUMN IF NOT EXISTS mfa_verified_at timestamptz");
   await database.query("CREATE TABLE IF NOT EXISTS qa_trusted_devices (id text PRIMARY KEY,user_id text NOT NULL REFERENCES \"user\"(id) ON DELETE CASCADE,agent_hash text NOT NULL,label text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),expires_at timestamptz NOT NULL)");
   await database.query("CREATE TABLE IF NOT EXISTS qa_work_domains (project_id text PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,domain text NOT NULL,challenge text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),verified_at timestamptz)");
+  await database.query("ALTER TABLE qa_work_domains ADD COLUMN IF NOT EXISTS restricted boolean NOT NULL DEFAULT false");
+  // Enforce even for an email-change confirmation issued before policy activation.
+  await database.query(`CREATE OR REPLACE FUNCTION qa_guard_owner_domain() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+    IF NEW.email IS DISTINCT FROM OLD.email AND EXISTS (SELECT 1 FROM projects p JOIN qa_work_domains d ON d.project_id=p.id WHERE p.owner_id=OLD.id AND d.restricted=true AND split_part(lower(NEW.email),'@',2)<>d.domain) THEN
+      RAISE EXCEPTION 'Disable the owned project domain restriction before changing to an outside email';
+    END IF;
+    RETURN NEW;
+  END $$`);
+  await database.query('CREATE OR REPLACE TRIGGER qa_guard_owner_domain BEFORE UPDATE OF email ON "user" FOR EACH ROW EXECUTE FUNCTION qa_guard_owner_domain()');
+
   await database.query("ALTER TABLE qa_invites ADD COLUMN IF NOT EXISTS delivery_status text NOT NULL DEFAULT 'manual'");
   await database.query('CREATE INDEX IF NOT EXISTS qa_model_setup_project_idx ON qa_model_setup(project_id,status,created_at)');
   await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS quality_version integer NOT NULL DEFAULT 0");

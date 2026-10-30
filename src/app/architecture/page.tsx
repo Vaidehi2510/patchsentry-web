@@ -74,11 +74,7 @@ export default function Architecture() {
           <section>
             <h2>Company domains and private spaces</h2>
             <p>
-              In My account, owners/admins can associate a work domain with a
-              product and prove control using a DNS TXT record. Each project
-              already has a private workspace link. Only invited members can
-              open its data. Domain verification does not enable SSO, automatic
-              joining, a custom hostname, or access to GitHub secrets.
+              In My account, project owners can prove domain control using a DNS TXT record, then require matching verified email addresses for every project member. An invitation and a project role are still required; people at the same company cannot see other projects automatically. Restrictions cover reports, evidence, exports and weekly summaries, including existing sessions. Report delivery to email and Slack is blocked while this policy is active. Previously shared copies cannot be recalled. Domain verification does not enable identity-provider SSO, automatic joining, a custom hostname, or access to GitHub secrets. Project service credentials and approved AI providers remain separate trusted integrations.
             </p>
           </section>
           <section>
