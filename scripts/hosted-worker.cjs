@@ -6,30 +6,31 @@ const {promisify}=require('node:util');
 const crypto=require('node:crypto');
 const exec=promisify(execFile),root='/vercel/sandbox';
 const started=Date.now();
-let input,stage='initializing';
+let input,stage='initializing',gitAskpass;
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
-async function command(cmd,args,cwd=root){return exec(cmd,args,{cwd,timeout:180000,maxBuffer:1024*1024,env:{PATH:process.env.PATH,HOME:process.env.HOME,CI:'1',GIT_TERMINAL_PROMPT:'0',GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_LFS_SKIP_SMUDGE:'1'}});}
+async function command(cmd,args,cwd=root){return exec(cmd,args,{cwd,timeout:180000,maxBuffer:1024*1024,env:{PATH:process.env.PATH,HOME:process.env.HOME,CI:'1',GIT_TERMINAL_PROMPT:'0',GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_LFS_SKIP_SMUDGE:'1',...(gitAskpass?{GIT_ASKPASS:gitAskpass}:{})}});}
 async function callback(suffix,body,headers={}){const r=await fetch(input.callbackUrl+suffix,{method:'POST',redirect:'error',signal:AbortSignal.timeout(20000),headers:{authorization:'Bearer '+input.callbackToken,'content-type':'application/json',...headers},body:typeof body==='string'||Buffer.isBuffer(body)?body:JSON.stringify(body)});if(!r.ok){await r.body?.cancel();throw new Error('Result delivery failed');}return r;}
-async function deliver(result){const safe=JSON.stringify(result).split(input.apiKey).join('[REDACTED]').split(input.callbackToken).join('[REDACTED]');for(let i=0;i<3;i++){try{await callback('',safe);return;}catch{if(i===2)throw new Error('Result delivery interrupted');await new Promise(r=>setTimeout(r,1000*(i+1)));}}}
+async function deliver(result){let safe=JSON.stringify(result).split(input.apiKey).join('[REDACTED]').split(input.callbackToken).join('[REDACTED]');if(input.gitHubToken)safe=safe.split(input.gitHubToken).join('[REDACTED]');for(let i=0;i<3;i++){try{await callback('',safe);return;}catch{if(i===2)throw new Error('Result delivery interrupted');await new Promise(r=>setTimeout(r,1000*(i+1)));}}}
 async function artifact(url,expected){const r=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(45000)});if(!r.ok||!r.body)throw new Error('Build artifact unavailable');const reader=r.body.getReader(),parts=[];let n=0;for(;;){const p=await reader.read();if(p.done)break;n+=p.value.length;if(n>64*1024*1024){await reader.cancel();throw new Error('Artifact exceeds 64 MiB');}parts.push(Buffer.from(p.value));}const bytes=Buffer.concat(parts);if(!bytes.length||sha(bytes)!==expected)throw new Error('Artifact digest mismatch');await fs.writeFile(root+'/build-artifact',bytes,{mode:0o600});}
 async function main(){
   input=JSON.parse(await fs.readFile(root+'/qa-input.json','utf8'));await fs.chmod(root+'/qa-input.json',0o600);
   const {hostedArtifactUrl,...job}=input.job;
   if(!/^[\w.-]+\/[\w.-]+$/.test(job.repository)||!/^\w[\w./-]{0,119}$/.test(job.base)||job.base.includes('..')||!/^[a-f0-9]{40}$/.test(job.revision)||!/^[a-f0-9]{40}$/.test(input.engineRevision))throw new Error('Invalid immutable inputs');
   stage='enforcing hosted network isolation';
-  await command('sudo',['sysctl','-w','net.ipv6.conf.all.disable_ipv6=1','net.ipv6.conf.default.disable_ipv6=1']);
+  if(require('node:fs').existsSync('/proc/sys/net/ipv6/conf/all/disable_ipv6'))await command('sudo',['sysctl','-w','net.ipv6.conf.all.disable_ipv6=1','net.ipv6.conf.default.disable_ipv6=1']);
   stage='preparing the QA engine';
   await command('git',['-c','core.hooksPath=/dev/null','clone','--no-checkout','--filter=blob:none','https://github.com/Vaidehi2510/QA-testbot.git',root+'/engine']);
   await command('git',['-c','core.hooksPath=/dev/null','checkout','--detach',input.engineRevision],root+'/engine');
   await command('npm',['ci','--omit=dev','--ignore-scripts','--no-audit','--no-fund'],root+'/engine');
   stage='preparing browser engines';
   await command('node',['node_modules/playwright-core/cli.js','install','--with-deps',...job.testingProfile.browsers],root+'/engine');
-  stage='reading the source revision (public repositories only)';
+  stage='reading the requested source revision';
+  if(input.gitHubToken){gitAskpass=root+'/git-askpass.cjs';await fs.writeFile(gitAskpass,"#!/usr/bin/env node\nconst fs=require('node:fs');const token=JSON.parse(fs.readFileSync('/vercel/sandbox/qa-input.json','utf8')).gitHubToken;process.stdout.write(/username/i.test(process.argv[2]||'')?'x-access-token':token);",{mode:0o700});}
   await command('git',['init','--bare',root+'/product.git']);
   const git=args=>command('git',['-c','core.hooksPath=/dev/null',...args],root+'/product.git');
   await git(['remote','add','origin','https://github.com/'+job.repository+'.git']);
   await git(['fetch','--no-tags','--depth=1','origin',job.base]);
-  await git(['update-ref',job.base,(await git(['rev-parse','FETCH_HEAD'])).stdout.trim()]);
+  if(!/^[a-f0-9]{40}$/.test(job.base))await git(['update-ref',job.base,(await git(['rev-parse','FETCH_HEAD'])).stdout.trim()]);
   await git(['fetch','--no-tags','--depth=1','origin',job.revision]);
   if((await git(['rev-parse','FETCH_HEAD'])).stdout.trim()!==job.revision)throw new Error('Source revision mismatch');
   const config={enabled:false,targetAccess:'read-only',runners:[],specificationPaths:[],ai:{enabled:true,...job.settings,maxInputChars:100000,maxOutputTokens:2000,provider:{data_collection:'deny',allow_fallbacks:false,require_parameters:true}}};

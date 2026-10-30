@@ -57,7 +57,10 @@ export async function startHosted(runtime:Runtime,projectId:string,jobId:string)
     if(!policy.allowedBackends.includes('openrouter')||policy.approvedModels.length&&[settings.model,...Object.values(settings.roleModels)].filter(Boolean).some(m=>!policy.approvedModels.includes(m!)))throw new JobError(403,'The selected model is outside the current project policy.');
     const preview=await hostedPreview(row.payload.testingProfile.previewUrlTemplate,row.payload,runtime.hostedLookup);
     const artifactHost=row.payload.hostedArtifactUrl?(await hostedPreview(row.payload.hostedArtifactUrl,row.payload,runtime.hostedLookup)).hostname:undefined;
-    const credential=await providerKey(runtime,projectId),callback=randomBytes(32).toString('base64url');
+    const credential=await providerKey(runtime,projectId);
+    const hasRepositoryKey=(await q("SELECT project_id FROM qa_provider_credentials WHERE project_id=$1 AND provider='github'",[projectId])).rows.length>0;
+    const gitHubToken=hasRepositoryKey?(await providerKey(runtime,projectId,'github')).apiKey:undefined;
+    const callback=randomBytes(32).toString('base64url');
     sandbox=await adapter.create(preview.hostname,artifactHost);
     const registered=await q("UPDATE qa_jobs SET sandbox_id=$3,callback_hash=$4,hosted_expires_at=now()+interval '15 minutes',message='Hosted worker preparing browsers and reading the requested source revision.',updated_at=now() WHERE project_id=$1 AND id=$2 AND status='running' RETURNING id",[projectId,jobId,sandbox.name,hash(callback)]);
     if(!registered.rows.length){await sandbox.stop();return;}
@@ -65,7 +68,7 @@ export async function startHosted(runtime:Runtime,projectId:string,jobId:string)
     const worker=await readFile(join(process.cwd(),'scripts/hosted-worker.cjs'));
     const engineRevision=(await readFile(join(process.cwd(),'scripts/hosted-engine-revision.txt'),'utf8')).trim();
     if(!/^[a-f0-9]{40}$/.test(engineRevision))throw new Error('Unpinned engine');
-    await sandbox.writeFiles([{path:'/vercel/sandbox/patchsentry-worker.cjs',content:worker},{path:'/vercel/sandbox/qa-input.json',content:Buffer.from(JSON.stringify({job:row.payload,apiKey:credential.apiKey,callbackToken:callback,callbackUrl:runtime.config.origin+'/api/internal/hosted/'+row.id,engineRevision,allowEvidenceUploads:policy.allowEvidenceUploads}))}]);
+    await sandbox.writeFiles([{path:'/vercel/sandbox/patchsentry-worker.cjs',content:worker},{path:'/vercel/sandbox/qa-input.json',content:Buffer.from(JSON.stringify({job:row.payload,apiKey:credential.apiKey,gitHubToken,callbackToken:callback,callbackUrl:runtime.config.origin+'/api/internal/hosted/'+row.id,engineRevision,allowEvidenceUploads:policy.allowEvidenceUploads}))}]);
     await sandbox.runCommand({cmd:'node',args:['/vercel/sandbox/patchsentry-worker.cjs'],cwd:'/vercel/sandbox',detached:true,timeoutMs:14*60_000});
     // If cancellation raced with start, stop the VM after launching as well.
     if(!(await q("SELECT id FROM qa_jobs WHERE id=$1 AND project_id=$2 AND status='running'",[jobId,projectId])).rows.length)await sandbox.stop();
@@ -102,5 +105,5 @@ export async function verifyHostedInfrastructure(request:Request,runtime:Runtime
   operatorAuthentication(request,runtime);await rate(runtime,'hosted-infrastructure-diagnostic',6,86400);
   let sandbox:Sandbox;
   try{sandbox=await Sandbox.create({persistent:false,timeout:300000,resources:{vcpus:2},image:'vercel/sandbox/universal:latest',networkPolicy:{allow:['registry.npmjs.org','*.ubuntu.com','cdn.playwright.dev','playwright.download.prss.microsoft.com'],subnets:{deny:deniedNetworks}},tags:{app:'patchsentry',purpose:'browser-diagnostic'}});}catch(e){const error=e as {name?:string;response?:Response;json?:{error?:{code?:string;message?:string}}};const name=/^[A-Za-z]{1,60}$/.test(error.name||'')?error.name:'UnknownError';const code=/^[a-z_]{1,60}$/.test(error.json?.error?.code||'')?error.json!.error!.code:'unspecified';const detail=error.response?.status===400?String(error.json?.error?.message||'').replace(/eyJ[A-Za-z0-9_.-]+/g,'[REDACTED]').slice(0,400):'';throw new JobError(503,`Hosted worker startup: ${name}; HTTP ${error.response?.status||0}; code ${code}. ${detail} No provider key or product data was used.`);}
-  try{await sandbox.writeFiles([{path:'/vercel/sandbox/smoke.cjs',content:await readFile(join(process.cwd(),'scripts/hosted-smoke.cjs'))}]);const result=await sandbox.runCommand({cmd:'node',args:['/vercel/sandbox/smoke.cjs'],timeoutMs:270000});const output=(await result.stdout()).trim();if(result.exitCode!==0)throw new JobError(503,'Hosted browser infrastructure check failed.');return {ok:true,...JSON.parse(output)};}finally{await sandbox.stop();}
+  try{await sandbox.writeFiles([{path:'/vercel/sandbox/smoke.cjs',content:await readFile(join(process.cwd(),'scripts/hosted-smoke.cjs'))}]);const result=await sandbox.runCommand({cmd:'node',args:['/vercel/sandbox/smoke.cjs'],timeoutMs:270000});const output=(await result.stdout()).trim();if(result.exitCode!==0){let detail='';try{const d=JSON.parse(output);detail=String(d.stage)+': '+String(d.detail||'').slice(0,600);}catch{}throw new JobError(503,'Hosted browser infrastructure check failed. '+detail);}return {ok:true,...JSON.parse(output)};}finally{await sandbox.stop();}
 }

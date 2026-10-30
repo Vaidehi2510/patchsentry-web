@@ -1,3 +1,4 @@
+import {repositoryConnection,connectRepository,disconnectRepository} from './repository-connection';
 import {after} from 'next/server';
 import {startHosted,stopHosted,completeHosted,verifyHostedInfrastructure} from './hosted';
 import {providerStatus,connectProvider,removeProvider,probeProvider} from './provider-vault';
@@ -438,6 +439,8 @@ async function dispatch(
   if (request.method !== "GET") requireOrigin(request, runtime.config.origin);
   const user = await userFor(request, runtime);
 
+  const repositorySetup=/^\/api\/projects\/([a-f0-9-]{36})\/repository-connection$/.exec(path);
+  if(repositorySetup){const p=await accessibleProject(runtime,repositorySetup[1],user.id,request.method==='GET'?'viewer':'admin');if(request.method==='GET')return json(await repositoryConnection(runtime,p.id));if(request.method==='POST')return json(await connectRepository(runtime,p.id,p.repository,await readBody(request),user.name));if(request.method==='DELETE')return json(await disconnectRepository(runtime,p.id,user.name));throw new ApiError(405,'Method not allowed.');}
   const provider=/^\/api\/projects\/([a-f0-9-]{36})\/provider\/openrouter(?:\/(probe))?$/.exec(path);
   if(provider){const p=await accessibleProject(runtime,provider[1],user.id,request.method==='GET'?'viewer':'admin');if(request.method==='GET')return json(await providerStatus(runtime,p.id));if(request.method==='POST')return json(provider[2]?await probeProvider(runtime,p.id,await readBody(request)):await connectProvider(runtime,p.id,await readBody(request),user.name));if(request.method==='DELETE'&&!provider[2])return json(await removeProvider(runtime,p.id,user.name));throw new ApiError(405,'Method not allowed.');}
   const quality=/^\/api\/projects\/([a-f0-9-]{36})\/(quality|requirements|bugs|metrics|quality-policy|repository-authorization|evidence|audit-export|retention)(?:\/([a-f0-9-]{36}|brief|export))?$/.exec(path);
