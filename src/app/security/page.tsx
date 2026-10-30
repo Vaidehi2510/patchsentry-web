@@ -33,7 +33,7 @@ const boundaries = [
   {
     icon: KeyRound,
     title: "Model credentials are protected.",
-    text: "Use runner environment variables or the owner/admin connection setup. Setup verifies OpenRouter keys over HTTPS and encrypts credentials to the selected runner. The portal does not persist plaintext keys or return saved keys to the browser.",
+    text: "Owner/admin setup verifies OpenRouter keys over HTTPS. Hosted keys are encrypted in project-scoped storage and delivered only to isolated QA workers. Optional private runners can keep their own keys. Saved keys are never returned to the browser.",
     detail:
       "Enter keys only in the authenticated connection-setup field or your runner secret manager. Keep them out of repository files, chat and uploaded reports.",
   },

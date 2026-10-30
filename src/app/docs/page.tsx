@@ -49,12 +49,11 @@ export default function DocsPage() {
         <div className="docs-content">
           <section id="architecture">
             <span className="eyebrow">01 / THE ARCHITECTURE</span>
-            <h2>A workspace and a runner.</h2>
+            <h2>A website and managed QA workers.</h2>
             <p>
               <strong>Patchsentry’s web workspace</strong> is where you organize
               review activity and inspect shared reports.{" "}
-              <strong>The self-hosted QA engine</strong> runs alongside your
-              repository, test environments, and model connection.
+              <strong>Hosted QA workers</strong> run browser checks and AI reviews for public repositories and disposable web previews. A self-hosted connector is optional for private networks, native devices or local models.
             </p>
             <div className="docs-diagram">
               <div>
@@ -65,7 +64,7 @@ export default function DocsPage() {
               <span>→</span>
               <div>
                 <Terminal size={24} />
-                <strong>Your QA engine</strong>
+                <strong>Hosted QA worker</strong>
                 <span>Models, tests, and evidence</span>
               </div>
               <span>→</span>
@@ -83,24 +82,10 @@ export default function DocsPage() {
             </p>
           </section>
           <section id="engine">
-            <span className="eyebrow">02 / INSTALL THE ENGINE</span>
-            <h2>Start a local QA workspace.</h2>
-            <p>
-              Use Node.js 22.17 or later. Clone the engine into its own
-              directory, install its dependencies, and start the local model
-              dashboard.
-            </p>
-            <pre className="docs-code">
-              <code>{`git clone https://github.com/Vaidehi2510/QA-testbot.git
-cd QA-testbot
-npm ci
-npm run dashboard`}</code>
-            </pre>
-            <p>
-              Open the localhost URL printed by the dashboard. You can browse
-              model settings without running a paid review. Production
-              integrations are enabled separately in the engine configuration.
-            </p>
+            <span className="eyebrow">02 / YOUR FIRST HOSTED RUN</span>
+            <h2>Configure QA on the website.</h2>
+            <ol><li>Create a project for an authorized public GitHub repository.</li><li>Open Models &amp; agents, paste your OpenRouter key, and verify it. Select and save your models and spending cap.</li><li>In Testing setup, save a public HTTPS preview, synthetic inputs and explicit expected outcomes. Add product requirements for build/release gates.</li><li>Request QA for a full source SHA and PR, build or version. Patchsentry starts a bounded isolated worker and delivers results to the dashboard.</li></ol>
+            <p>No local installation or runner token is needed for hosted web QA. The preview must expose <code>x-qa-revision</code> tied to its actual deployed commit. Build/release previews also expose <code>x-qa-artifact-sha256</code> and require a direct immutable artifact URL (up to 64 MiB).</p><p>The shared hosted pilot permits two concurrent jobs and eight starts per month, with a 15-minute worker lifetime. Model charges use your OpenRouter credits. Private repositories, authored unit-test execution and native/device suites currently use the optional advanced runner.</p>
             <a
               className="text-link"
               href={`${engine}/blob/main/README.md`}
@@ -120,7 +105,7 @@ npm run dashboard`}</code>
                 </span>
                 <h3>OpenRouter</h3>
                 <p>
-                  In Models &amp; agents, verify your key and deliver it encrypted to your trusted runner, or set <code>OPENROUTER_API_KEY</code> in the engine environment.
+                  In Models &amp; agents, paste and verify your key directly. Patchsentry stores it encrypted and passes it only to your isolated hosted worker. No connector is required. Advanced self-hosted setups can keep keys on their own runner.
                   Browse models, select a default or per-role model, and choose
                   a spending limit.
                 </p>

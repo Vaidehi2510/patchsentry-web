@@ -1,3 +1,4 @@
+import {policyDefaults} from '../src/lib/quality';
 import {secureSession} from './auth-session';
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -34,6 +35,7 @@ async function signup(name: string) {
 async function project(ready = true) {
   const created = await call('/api/projects', 'POST', { name: 'Test project', repository: `owner/product-${randomUUID()}` }, alice);
   const value = (await created.json()).project; assert.ok(value.id);
+  await runtime.database.query('UPDATE projects SET quality_policy=$2::jsonb WHERE id=$1',[value.id,JSON.stringify({...policyDefaults,requirePlanForRelease:false,monthlyInferenceBudgetUsd:100000})]);
   const issued = await call(`/api/projects/${value.id}/token`, 'POST', {}, alice); const token = (await issued.json()).token;
   if (ready) {
     assert.equal((await call(`/api/projects/${value.id}`, 'PATCH', { testingProfile: profile }, alice)).status, 200);

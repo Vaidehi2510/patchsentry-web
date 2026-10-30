@@ -93,6 +93,7 @@ export const FindingSchema = z
 export const RunInputSchema = z
   .object({
     schemaVersion: z.literal(1),
+    qualityPlanDigest:z.string().regex(/^[a-f0-9]{64}$/).optional(),
     recordId: z.string().regex(/^[a-f0-9]{64}$/),
     repository: z
       .string()
@@ -184,6 +185,7 @@ export function computeScore(
   };
 }
 export type Project = {
+  executionMode?: "hosted" | "self-hosted";
   accessRole?: AccessRole;
   maxParallel?: number;
   id: string;

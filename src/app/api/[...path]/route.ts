@@ -1,6 +1,7 @@
 import { handleRequest } from "@/lib/server/api";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 const route = (request: Request) => handleRequest(request);
 export const GET = route;

@@ -1,4 +1,5 @@
 "use client";
+import {QualityHub,EvidencePanel} from "./quality-hub";
 import {AccountSettings} from "./account-settings";
 import { subjectLabel, subjectTitle, platformLabels } from "@/lib/targets";
 import { releaseGate } from "@/lib/release-gate";
@@ -10,6 +11,7 @@ import { BrandMark } from "./marketing/site-shell";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   LayoutDashboard,
+  ClipboardCheck,
   GitPullRequest,
   SlidersHorizontal,
   Plug,
@@ -46,10 +48,11 @@ import "./workspace.css";
 import { MotionToggle } from "./motion";
 import { runnerOnline } from "@/lib/jobs";
 
-type Tab = "overview" | "runs" | "models" | "testing" | "integration" | "tests" | "team" | "account";
+type Tab = "overview" | "runs" | "models" | "testing" | "integration" | "tests" | "team" | "account" | "quality";
 type User = { id: string; name: string; email: string };
 const nav = [
   { id: "overview" as Tab, label: "Overview", icon: LayoutDashboard },
+  { id: "quality" as Tab, label: "Product QA", icon: ClipboardCheck },
   { id: "runs" as Tab, label: "QA reports", icon: GitPullRequest },
   { id: "tests" as Tab, label: "Test library", icon: Code2 },
   { id: "models" as Tab, label: "Models & agents", icon: SlidersHorizontal },
@@ -452,7 +455,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   </span>
                   <h2>Your first product starts here.</h2>
                   <p>
-                    Bring a personal project or a team product. Create a project, connect a runner, then choose your model and checks.
+                    Bring a personal project or a team product. Create a project, connect OpenRouter on the website, then choose your model and checks.
                     <br />
                     Results will appear after your first PR, build, or release assessment.
                   </p>
@@ -466,14 +469,16 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                 </div>
               ) : selected ? (
                 <RunDetail
+                  projectId={project.id}
                   run={selected}
                   onBack={() => setSelected(null)}
                   demo={demo}
                 />
               ) : (
                 <>
+                  {tab === "quality" && <QualityHub project={project} runs={runs} demo={demo} navigate={go}/>}
                   {tab === "team" && <TeamOperations key={project.id} project={project} demo={demo} />}
-                  {!demo && tab === "overview" && <ProjectSetup project={project} navigate={go} />}
+                  {!demo && tab === "overview" && <><section className="notice"><div><strong>Build a durable QA plan for this product.</strong><p>Connect the repository, define requirements, inspect bugs and measure outcomes in one guided workflow.</p><button className="text-button" onClick={()=>go("quality")}>Open Product QA setup →</button></div></section><ProjectSetup project={project} navigate={go} /></>}
                   {tab === "testing" && <fieldset className="access-controls" disabled={roleRank[project.accessRole || "owner"] < 2}><TestingSetup key={project.id} project={project} demo={demo} onSaved={value => setProjects(items => items.map(p => p.id === value.id ? value : p))} /></fieldset>}
                   {tab === "overview" && (
                     <>
@@ -590,14 +595,14 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                               ? "Your workflow, with a second set of eyes."
                               : project.agentLastSeen
                                 ? "Your runner has checked in."
-                                : "Connect a runner to start collecting evidence."}
+                                : "Configure hosted QA to start collecting evidence."}
                           </strong>
                           <p>
                             {demo
                               ? "Keep GitHub as your source of truth. Bring QA into changes, builds and complete releases."
                               : project.agentLastSeen
                                 ? `Last heartbeat: ${new Date(project.agentLastSeen).toLocaleString()}`
-                                : "The runner reads your product and publishes bounded reports to this workspace."}
+                                : "Hosted workers inspect your source and disposable preview, then publish results here."}
                           </p>
                         </div>
                         <button
@@ -739,7 +744,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
 }
 function ProjectSetup({ project, navigate }: { project: Project; navigate: (tab: Tab) => void }) {
   const steps: { title: string; text: string; done: boolean; tab: Tab }[] = [
-    { title: "Connect your runner", text: "Keep tests and source access on your own machine or trusted runner.", done: Boolean(project.tokenConfigured && runnerOnline(project.agentLastSeen)), tab: "integration" },
+    { title: "Connect your AI provider", text: "Paste and verify your OpenRouter key on the website. Hosted web QA needs no local connector.", done: project.executionMode === "hosted", tab: "models" },
     { title: "Choose your AI", text: "Pick a compatible local model or browse OpenRouter models.", done: Boolean(project.settings.model), tab: "models" },
     { title: "Define your test coverage", text: "Set browser goals, or enroll API/native suites and CI results for your product.", done: Boolean(project.testingProfile?.previewUrlTemplate && project.testingProfile.goals.goals.length || project.runner?.ready && project.runner.baselineSuites && project.runner.platforms?.some(p => p !== "web")), tab: "testing" },
   ];
@@ -822,7 +827,7 @@ function RunTable({
     <div className="empty-state">
       <GitPullRequest size={24} />
       <h3>No reports yet</h3>
-      <p>Connect a runner and assess a PR, build, or release to see real results here.</p>
+      <p>Connect OpenRouter, save your preview and expectations, then request QA to see real results here.</p>
     </div>
   );
 }
@@ -892,10 +897,12 @@ function Reports({
   );
 }
 function RunDetail({
+  projectId,
   run,
   onBack,
   demo,
 }: {
+  projectId:string;
   run: Run;
   onBack: () => void;
   demo: boolean;
@@ -930,6 +937,7 @@ function RunDetail({
           <span>check score</span>
         </div>
       </div>
+      <section className="panel"><EvidencePanel root={`/api/projects/${projectId}`} recordId={run.recordId} demo={demo}/></section>
       {run.target && <section className="panel release-summary"><div><span className="eyebrow">VERSION-LEVEL QA</span><h2>{releaseGate(run, { revision: run.revision, target: run.target }).eligible ? "QA evidence meets the release gate" : "Release gate needs attention"}</h2><p>Platform: {platformLabels[run.target.platform]} · {run.target.kind === 'release' ? 'Version' : 'Build'}: {run.target.name}</p><label>Exact artifact SHA-256<code>{run.target.artifactSha256}</code></label><p className="fineprint">Use the deployment gate against the same artifact before shipping. It never deploys the product or changes its source.</p></div><ul>{releaseGate(run, { revision: run.revision, target: run.target }).reasons.map(reason => <li key={reason}>{reason}</li>)}</ul></section>}
       <div className="detail-grid">
         <section className="panel">
@@ -1070,7 +1078,7 @@ function Integration({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [copied, setCopied] = useState(false),
-    [confirm, setConfirm] = useState(false);
+    [confirm, setConfirm] = useState(false), [advanced,setAdvanced]=useState(false);
   async function rotate() {
     setBusy(true);
     setError("");
@@ -1092,6 +1100,7 @@ function Integration({
     typeof window !== "undefined"
       ? location.origin
       : "https://YOUR-PATCHSENTRY-SITE";
+  if(project.settings.backend==='openrouter'&&!advanced)return <section className="panel operations-panel"><span className="eyebrow">HOSTED QA · NO CUSTOMER INFRASTRUCTURE</span><h2>Run QA from your browser</h2><p>In Models &amp; agents, paste and verify your OpenRouter key. Save your model selection, then add a public disposable preview and expected behavior in Testing setup.</p><p>Patchsentry provisions an isolated cloud worker for each requested run. You do not need a runner token, a connector command, Docker, or an always-on computer.</p><RunnerStatus project={project}/><p className="fineprint">Hosted web testing currently reads public GitHub repositories. Builds/releases also require an immutable public artifact URL. Private repositories, local models, authored unit-test execution and native device suites use the optional advanced runner.</p><button className="button button-secondary" onClick={async()=>{try{if(!demo){await api(`/api/projects/${project.id}`,{method:'PATCH',body:JSON.stringify({executionMode:'self-hosted'})});refresh();}setAdvanced(true);}catch(e){setError((e as Error).message);}}}>Advanced: configure a private or self-hosted runner</button></section>;
   return (
     <div className="integration-layout">
       <section className="panel integration-main">

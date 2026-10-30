@@ -1,11 +1,5 @@
-/.git
-/.next
-/node_modules
-/.vercel
-/.env*
-/.local
-/artifacts
-/test
-/docs
+artifacts/
+.local/
+.env*
+!/.env.example
 *.tsbuildinfo
-/.DS_Store

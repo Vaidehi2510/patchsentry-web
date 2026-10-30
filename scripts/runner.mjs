@@ -1,3 +1,4 @@
+import {uploadRunnerEvidence} from "./evidence-upload.mjs";
 import { hostname } from "node:os";
 import { githubPeople } from "./team-updates.mjs";
 import { assessmentIdentity, sameAssessment } from "./assessment.mjs";
@@ -32,6 +33,7 @@ export async function prepareRunner({ bot, options, env, repository, readJson, t
     const preflight = await bridge.preflightPortal({ policy: raw, policyPath, botDir: bot.botDir, env: executionEnvironment(env) });
     if (repository && policy.repository.toLowerCase() !== repository.toLowerCase()) heartbeat.missing.push('The local policy repository differs from the portal project.');
     heartbeat.missing.push(...(Array.isArray(preflight.missing) ? preflight.missing : ['Runner preflight did not provide a result.']).map(value => sanitizeText(value, 240)).slice(0, 19));
+    heartbeat.qualityPlans = typeof bridge.validateQualityPlan === "function";
     heartbeat.platforms = policy.allowedPlatforms || [];
     heartbeat.baselineSuites = Math.min(60, (bot.config?.runners || []).filter(r => r.baseline).length);
     heartbeat.workspaceTests = policy.allowWorkspaceTests === true;
@@ -80,7 +82,8 @@ export function sanitizeJobReport(raw, job, clean) {
   const findings = raw.findings.map(f => ({ title: clean(f.title, 240) || 'Untitled finding', severity: ['critical', 'high', 'medium', 'low', 'info'].includes(f.severity) ? f.severity : 'info', category: clean(f.category, 80), description: clean(f.description, 1600), ...(typeof f.suggestedFix === 'string' ? { suggestedFix: clean(f.suggestedFix, 1600) } : {}), status: 'unverified' }));
   if (!Number.isFinite(Date.parse(raw.createdAt)) || raw.completedAt && !Number.isFinite(Date.parse(raw.completedAt))) throw new Error('The runner report has invalid timestamps.');
   const finite = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 10000;
-  const report = { schemaVersion: 1, recordId: raw.recordId, repository: job.repository, ...(job.target ? assessmentIdentity(job) : { pr: { number: job.pr.number, title: clean(raw.pr.title, 300) } }), revision: job.revision,
+  if(job.qualityPlan&&raw.qualityPlanDigest!==job.qualityPlan.digest)throw new Error('The execution report is not bound to its frozen quality plan.');
+  const report = { schemaVersion: 1,...(job.qualityPlan?{qualityPlanDigest:job.qualityPlan.digest}:{}), recordId: raw.recordId, repository: job.repository, ...(job.target ? assessmentIdentity(job) : { pr: { number: job.pr.number, title: clean(raw.pr.title, 300) } }), revision: job.revision,
     createdAt: new Date(raw.createdAt).toISOString(), completedAt: raw.completedAt ? new Date(raw.completedAt).toISOString() : null, phase: clean(raw.phase, 80), checks, findings,
     ai: { backend: ['openrouter', 'local'].includes(raw.ai?.backend) ? raw.ai.backend : 'unknown', model: clean(raw.ai?.model, 160), costUsd: finite(raw.ai?.costUsd) ? raw.ai.costUsd : null, costIsEstimate: raw.ai?.costIsEstimate !== false, calls: Number.isInteger(raw.ai?.calls) && finite(raw.ai.calls) ? raw.ai.calls : 0 },
     limitations: (Array.isArray(raw.limitations) ? raw.limitations : []).slice(0, 29).map(value => clean(value, 600)).concat('Sanitized summaries may contain product information; source files, screenshots and raw evidence remain on the runner.') };
@@ -88,7 +91,7 @@ export function sanitizeJobReport(raw, job, clean) {
   return report;
 }
 
-export async function runClaimedJob({ runner, bot, portal, models, env, readJson, trustedPath, sanitizeText, signal, execute = executeBridge, renewMs = 30000, githubContext = false, onStarted = undefined }) {
+export async function runClaimedJob({ runner, bot, portal, models, env, readJson, trustedPath, sanitizeText, signal, execute = executeBridge, uploadEvidence = false, renewMs = 30000, githubContext = false, onStarted = undefined }) {
   if (!runner.heartbeat.ready) return { status: 'not-ready' };
   const claim = await portal.request('POST', '/api/agent/jobs/claim', { runnerId: runner.heartbeat.id });
   if (!claim?.job) return { status: 'idle' };
@@ -98,6 +101,7 @@ export async function runClaimedJob({ runner, bot, portal, models, env, readJson
   const ack = (status, message = '', recordId) => portal.request('POST', `/api/agent/jobs/${job.id}/complete`, { ...lease, status, message, ...(recordId ? { recordId } : {}) });
   try { runner.bridge.validateJob(job, runner.policy); }
   catch { await ack('blocked', 'Job exceeds the locally enrolled repository, preview, browser, model, mutation or budget policy. Update the local policy deliberately or request a compatible run.'); return { status: 'blocked', id: job.id }; }
+  const startedAt=Date.now();
   const abort = new AbortController();
   const stopped = () => abort.abort(); signal?.addEventListener('abort', stopped, { once: true });
   if (signal?.aborted) abort.abort();
@@ -128,8 +132,10 @@ export async function runClaimedJob({ runner, bot, portal, models, env, readJson
     const report = sanitizeJobReport((await readJson(reportFile, MAX)).value, job, sanitizeText);
     report.people = await githubPeople(job,{token:githubContext ? env.GITHUB_TOKEN : undefined});
     await portal.request('PUT', `/api/agent/runs/${report.recordId}`, report);
+    let evidence={status:'disabled',uploaded:0};try{evidence=await uploadRunnerEvidence({enabled:uploadEvidence,portal,botDir:bot.botDir,outputDir,report,trustedPath});}catch{evidence={status:'not_confirmed',uploaded:0};}
+    try{await portal.request('PUT',`/api/agent/runs/${report.recordId}/usage`,{jobId:job.id,durationMs:Date.now()-startedAt,inferenceUsd:report.ai.costUsd,infrastructureUsd:null,humanMinutes:null,costIsEstimate:report.ai.costIsEstimate});}catch{/* Accounting remains visibly unknown instead of inventing zero. */}
     await ack('completed', 'The reviewed runner finished. Check outcomes determine the QA result.', report.recordId);
-    return { status: 'completed', id: job.id, recordId: report.recordId, resumedReport: exists };
+    return { status: 'completed', id: job.id, recordId: report.recordId, resumedReport: exists, evidence };
   } catch {
     if (!leaseLost) await ack('blocked', 'The runner did not produce and upload a valid complete report. Inspect local prerequisites/evidence before explicitly retrying.').catch(() => {});
     return { status: 'blocked', id: job.id };

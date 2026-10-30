@@ -12,6 +12,7 @@ export interface AuthConfig {
   sendSignInLink?: SendSignInLink;
   sendSecurityCode?: SendSecurityCode;
   sendInvitation?: SendInvitation;
+  cronSecret?: string;
 }
 
 export function authConfig(
@@ -40,7 +41,7 @@ export function authConfig(
     throw new Error("BETTER_AUTH_URL must be an exact site origin");
   if (production && (url.protocol !== "https:" || !env.DATABASE_URL))
     throw new Error("Production requires HTTPS and DATABASE_URL");
-  return { secret: env.BETTER_AUTH_SECRET, origin: url.origin, production, sendSignInLink: gmailSender(url.origin, env), sendSecurityCode:gmailSecuritySender(env), sendInvitation:gmailInvitationSender(url.origin,env) };
+  return { secret: env.BETTER_AUTH_SECRET, origin: url.origin, production, sendSignInLink: gmailSender(url.origin, env), sendSecurityCode:gmailSecuritySender(env), sendInvitation:gmailInvitationSender(url.origin,env),cronSecret:env.CRON_SECRET };
 }
 
 export function authOptions(
@@ -168,4 +169,20 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
   await database.query("CREATE TABLE IF NOT EXISTS qa_work_domains (project_id text PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,domain text NOT NULL,challenge text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),verified_at timestamptz)");
   await database.query("ALTER TABLE qa_invites ADD COLUMN IF NOT EXISTS delivery_status text NOT NULL DEFAULT 'manual'");
   await database.query('CREATE INDEX IF NOT EXISTS qa_model_setup_project_idx ON qa_model_setup(project_id,status,created_at)');
+  await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS quality_version integer NOT NULL DEFAULT 0");
+  await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS quality_brief text NOT NULL DEFAULT ''");
+  await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS quality_policy jsonb");
+  await database.query("CREATE TABLE IF NOT EXISTS qa_requirements (project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,id text NOT NULL,version integer NOT NULL DEFAULT 1,payload jsonb NOT NULL,active boolean NOT NULL DEFAULT true,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(project_id,id))");
+  await database.query("CREATE TABLE IF NOT EXISTS qa_bugs (id text PRIMARY KEY,project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,payload jsonb NOT NULL,fingerprint text NOT NULL,status text NOT NULL DEFAULT 'open',assignee text,version integer NOT NULL DEFAULT 1,decision jsonb,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(project_id,fingerprint))");
+  await database.query("CREATE TABLE IF NOT EXISTS qa_evidence (project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,id text NOT NULL,record_id text NOT NULL,metadata jsonb NOT NULL,bytes integer NOT NULL,encrypted bytea NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),expires_at timestamptz NOT NULL,PRIMARY KEY(project_id,id),FOREIGN KEY(project_id,record_id) REFERENCES qa_runs(project_id,record_id) ON DELETE CASCADE)");
+  await database.query("CREATE INDEX IF NOT EXISTS qa_evidence_retention_idx ON qa_evidence(expires_at)");
+  await database.query("CREATE TABLE IF NOT EXISTS qa_usage (project_id text NOT NULL,record_id text NOT NULL,payload jsonb NOT NULL,PRIMARY KEY(project_id,record_id),FOREIGN KEY(project_id,record_id) REFERENCES qa_runs(project_id,record_id) ON DELETE CASCADE)");
+  await database.query("CREATE TABLE IF NOT EXISTS qa_repository_authorizations (project_id text PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,owner_id text NOT NULL,github_repository_id bigint NOT NULL,github_user_id bigint,github_login text,mode text NOT NULL,verified_at timestamptz NOT NULL DEFAULT now())");
+
+ await database.query("ALTER TABLE qa_jobs ADD COLUMN IF NOT EXISTS execution_mode text NOT NULL DEFAULT 'self-hosted', ADD COLUMN IF NOT EXISTS sandbox_id text, ADD COLUMN IF NOT EXISTS callback_hash text, ADD COLUMN IF NOT EXISTS hosted_expires_at timestamptz");
+ await database.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS execution_mode text NOT NULL DEFAULT 'self-hosted'");
+ await database.query("CREATE SEQUENCE IF NOT EXISTS qa_provider_generation START 100000");
+ await database.query("CREATE TABLE IF NOT EXISTS qa_provider_credentials (project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,provider text NOT NULL,encrypted bytea NOT NULL,suffix text NOT NULL,version integer NOT NULL DEFAULT 1,verified_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(project_id,provider))");
+ await database.query("CREATE TABLE IF NOT EXISTS qa_provider_probes (project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,id text NOT NULL,model text NOT NULL,credential_version integer NOT NULL,status text NOT NULL,message text NOT NULL DEFAULT 'Check in progress.',created_at timestamptz NOT NULL DEFAULT now(),completed_at timestamptz,PRIMARY KEY(project_id,id))");
+
 }

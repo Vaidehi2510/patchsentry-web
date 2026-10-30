@@ -4,7 +4,7 @@ A public product website and private QA workspace for [QA-testbot](https://githu
 
 [Visit Patchsentry](https://patchsentry.vercel.app) · [Explore the demo](https://patchsentry.vercel.app/demo) · [Integration guide](https://patchsentry.vercel.app/docs)
 
-The website is the control and reporting interface. The separate QA engine executes checks on a trusted runner. It can read product source and publish PR comments, labels, and statuses; it never edits, pushes, or merges product code.
+The website is the control and reporting interface. The separate QA engine executes checks in managed isolated cloud workers, or on an optional trusted private runner. It can read product source and publish PR comments, labels, and statuses; it never edits, pushes, or merges product code.
 
 ## What is implemented
 
@@ -105,13 +105,13 @@ Tests use real Better Auth sessions and PostgreSQL-compatible storage. They cove
 
 ## Boundaries of this release
 
-- No unattended QA service is provisioned by signing up. A trusted runner and the QA engine must be configured for each product.
+- Hosted web QA is configured directly on the website: verify an encrypted OpenRouter key, choose models, save a public disposable preview and trusted goals, then request QA. No connector or customer-managed machine is required. The shared pilot permits two concurrent jobs and eight starts per month, with 15-minute workers. Model billing uses the connected OpenRouter account.
 - Email links establish inbox ownership, not repository ownership. Billing, SAML/SCIM and GitHub OAuth installation are not enabled in this beta. Password recovery retains the configured second factor and revokes existing sessions and pending login challenges.
 - Registering a repository grants no GitHub access. A project token reads its project’s settings, claims locally enrolled jobs and submits reports; it cannot read another account’s data.
 - Report scores are `floor(passed required checks / all required checks × 100)`. No required checks means no score. Failed, blocked, skipped, unsupported, and pending checks cannot count as passed. High-severity AI findings require review even when checks pass.
 - AI findings are unverified suggestions. A score is neither test coverage nor a guarantee that a product is bug-free.
 - Reports include bounded summaries and may contain product information. Product source files, patches, raw logs, transcripts, screenshot bytes, and provider keys are excluded from report uploads. Test source that you explicitly author in the test library is stored and sent to the enrolled runner when enabled. Pattern-based redaction cannot guarantee removal of every sensitive detail.
-- Detailed evidence stays on the runner. GitHub comments and release decisions remain in the QA engine’s existing workflow.
+- Evidence uploads require explicit owner opt-in and are retained encrypted with expiration. Without opt-in, detailed evidence remains ephemeral on hosted workers or on the private runner. GitHub comments and release decisions remain in the QA engine’s existing workflow.
 - The current engine’s supported execution paths and browser coverage are documented in its repository. This website does not add native-app testing or exhaustive coverage for every technology stack.
 
 ## Architecture
@@ -158,3 +158,7 @@ Invitations now send through `AuthConfig.sendInvitation`, configured from the ex
 Owners/admins may associate a work domain with a project in My account by publishing its project-bound DNS TXT challenge at `_patchsentry.<domain>`. New challenges expire in 24 hours; verification stores a timestamp, not a permanent guarantee of domain control. This identifies the workspace, but does not enable automatic joining, SSO, custom hostnames or repository authorization. Workspace links remain private and membership checked.
 
 See the public [architecture guide](https://patchsentry.vercel.app/architecture): `QA-testbot` is the runner engine; `patchsentry-web` is the website, connector and current report backend. `Patchsentry-Ledger-Java` is a separate optional Spring Boot report service. The current website and connector do not call Ledger; integrating it requires an explicit API/auth adapter. Ledger deployment is not a prerequisite for current QA runs.
+
+## Hosted execution
+
+See [hosted QA](docs/hosted.md) for the SaaS flow, supported scope, operational limits and deployment verification. Local model and private-network connectors remain optional.

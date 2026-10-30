@@ -3,11 +3,16 @@ import { createDatabase, type Database } from "./database";
 import type { CatalogModel } from "../contracts";
 
 export interface Runtime {
+  defer?: (work:()=>Promise<unknown>)=>void;
+  hosted?: import("./hosted").HostedAdapter;
+  hostedLookup?: typeof import("node:dns/promises").lookup;
   database: Database;
   auth: Auth;
   config: AuthConfig;
   catalog?: () => Promise<{ models: CatalogModel[]; fetchedAt: string }>;
   connectionFetch?: typeof fetch;
+  inferenceFetch?: typeof fetch;
+  repositoryFetch?: typeof fetch;
   domainResolve?: (name:string)=>Promise<string[][]>;
 }
 let current: Promise<Runtime | null> | undefined;

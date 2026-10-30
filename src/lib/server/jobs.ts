@@ -1,3 +1,4 @@
+import {planSnapshot,policyFor} from './quality';
 import { audit, queueNotification, resultSummary } from "./team";
 import { sameSubject } from "../targets";
 import { enabledUnitTests } from "./test-cases";
@@ -8,7 +9,7 @@ import type { Database } from "./database";
 import { z } from "zod";
 
 export class JobError extends Error { constructor(public status: number, message: string) { super(message); } }
-export type QueueProject = { id: string; repository: string; settings: Settings; testing_profile?: unknown; runner?: Runner | null; agent_last_seen: Date | string | null; max_parallel?: number };
+export type QueueProject = { id: string; repository: string; settings: Settings; testing_profile?: unknown; runner?: Runner | null; agent_last_seen: Date | string | null; max_parallel?: number; execution_mode?: string };
 type Row = { id: string; payload: JobInput; status: Job["status"]; attempts: number; runner_id: string | null; lease_hash: string | null; lease_expires_at: Date | string | null; message: string; record_id: string | null; created_at: Date | string; updated_at: Date | string };
 const iso = (v: Date | string) => new Date(v).toISOString();
 const tokenHash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -39,19 +40,29 @@ export async function createJob(database: Database, project: QueueProject, body:
     await expire(q, project.id);
     const count = await q<{ total: string; active: string }>("SELECT count(*) AS total, count(*) FILTER (WHERE status IN ('queued','running')) AS active FROM qa_jobs WHERE project_id = $1", [project.id]);
     if (Number(count.rows[0].active) >= 20 || Number(count.rows[0].total) >= 1000) throw new JobError(409, "The project job queue or history limit has been reached.");
+    const hosted=project.execution_mode==='hosted' && project.settings.backend==='openrouter';
+    if(hosted){
+      await q('LOCK TABLE qa_jobs IN SHARE ROW EXCLUSIVE MODE');
+      const usage=(await q<{monthly:string;active:string}>("SELECT count(*) FILTER (WHERE created_at>=date_trunc('month',now()) AND (status IN ('queued','running','completed') OR attempts>0)) AS monthly,count(*) FILTER (WHERE status IN ('queued','running')) AS active FROM qa_jobs WHERE execution_mode='hosted'",[])).rows[0];
+      if(Number(usage.monthly)>=8||Number(usage.active)>=2)throw new JobError(409,'Hosted worker capacity or the shared monthly pilot allowance is full. No paid work was started.');
+    }
+    const qualityPlan=await planSnapshot(q,project.id),policy=await policyFor(q,project.id);
+    await admitPolicy(q,project.id,project.settings);
     const profile = parse(TestingProfileSchema, project.testing_profile || testingDefaults);
-    const payload = parse(JobInputSchema, { schemaVersion: 1, id: randomUUID(), ...(requestedBy ? {requestedBy:requestedBy.slice(0,100)} : {}), repository: project.repository, ...(input.target ? { target: input.target } : { pr: { number: input.prNumber } }), unitTests: await enabledUnitTests(q, project.id), revision: input.revision.toLowerCase(), base: profile.baseRef, settings: project.settings, testingProfile: profile });
+    const payload = parse(JobInputSchema, { schemaVersion: 1, id: randomUUID(), ...(input.hostedArtifactUrl?{hostedArtifactUrl:input.hostedArtifactUrl}:{}), ...((qualityPlan.requirements.length||qualityPlan.brief)?{qualityPlan}:{}), ...(requestedBy ? {requestedBy:requestedBy.slice(0,100)} : {}), repository: project.repository, ...(input.target ? { target: input.target } : { pr: { number: input.prNumber } }), unitTests: await enabledUnitTests(q, project.id), revision: input.revision.toLowerCase(), base: profile.baseRef, settings: project.settings, testingProfile: profile });
     const available=(await q<{payload:Runner;last_seen:Date|string}>('SELECT payload,last_seen FROM qa_runners WHERE project_id=$1',[project.id])).rows;
     const compatible=available.filter(r=>runnerOnline(iso(r.last_seen))).map(r=>r.payload).find(r=>runnerFits(r,payload));
     const browserRequired = !input.target || input.target.platform === "web";
-    const missing = input.target?.platform === "web" && profile.previewUrlTemplate.includes("{pr}") ? "Save a build/release preview URL without a PR placeholder; use a fixed staging origin or {sha}." : input.target && !(compatible || project.runner)?.platforms?.includes(input.target.platform) ? "Enroll this build/release platform and its builder manifest on the local runner." : payload.unitTests?.length && !(compatible || project.runner)?.workspaceTests ? "Enroll authored unit tests on the local runner before requesting this run." : browserRequired && !profile.previewUrlTemplate ? "Save a preview URL in Testing setup before retrying." : browserRequired && !profile.goals.goals.length ? "Add at least one explicit trusted goal and assertion in Testing setup before retrying." : project.settings.roles.some(role => !project.settings.roleModels[role] && !project.settings.model) ? "Select models for each QA role, then request a new run." : !compatible ? "An enrolled ready runner compatible with this job must be online before retrying." : "";
+    const hostedMissing = hosted ? !(await q("SELECT project_id FROM qa_provider_credentials WHERE project_id=$1 AND provider='openrouter'",[project.id])).rows.length ? 'Connect your OpenRouter key in Models & agents; no connector is required.' : input.target && input.target.platform!=='web' ? 'Hosted QA currently runs web previews. This native/API platform needs an optional enrolled runner.' : input.target&&!input.hostedArtifactUrl ? 'Provide a public immutable artifact URL and its SHA-256 for hosted build/release QA.' : payload.unitTests?.length ? 'Hosted browser runs do not yet execute authored unit tests. Disable those tests for a browser-only run or use an isolated test runner.' : profile.visualRegression ? 'Hosted visual baseline storage is not configured. Disable baseline comparison or use an enrolled visual runner.' : '' : '';
+    const missing = hostedMissing || (policy.requirePlanForRelease&&input.target&&(!qualityPlan.requirements.length||qualityPlan.requirements.some(r=>['critical','high'].includes(r.risk)&&!r.checkIds.length&&!r.goalIds.length)) ? 'Map the active critical/high requirements to explicit checks or goals before release testing.' : input.target?.platform === "web" && profile.previewUrlTemplate.includes("{pr}") ? "Save a build/release preview URL without a PR placeholder; use a fixed staging origin or {sha}." : !hosted && input.target && !(compatible || project.runner)?.platforms?.includes(input.target.platform) ? "Enroll this build/release platform and its builder manifest on the local runner." : !hosted && payload.unitTests?.length && !(compatible || project.runner)?.workspaceTests ? "Enroll authored unit tests on the local runner before requesting this run." : browserRequired && !profile.previewUrlTemplate ? "Save a preview URL in Testing setup before retrying." : browserRequired && !profile.goals.goals.length ? "Add at least one explicit trusted goal and assertion in Testing setup before retrying." : project.settings.roles.some(role => !project.settings.roleModels[role] && !project.settings.model) ? "Select models for each QA role, then request a new run." : !hosted && !compatible ? "An enrolled ready runner compatible with this job must be online before retrying." : "");
     // A blocked request is still durable and visible. Profile changes need a new request to preserve immutable input.
-    const result = await q<Row>("INSERT INTO qa_jobs (id, project_id, dedupe_key, payload, status, message) VALUES ($1,$2,$3,$4::jsonb,$5,$6) RETURNING *", [payload.id, project.id, input.dedupeKey, JSON.stringify(payload), missing ? "blocked" : "queued", missing]);
+    const result = await q<Row>("INSERT INTO qa_jobs (id, project_id, dedupe_key, payload, status, message,execution_mode) VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7) RETURNING *", [payload.id, project.id, input.dedupeKey, JSON.stringify(payload), missing ? "blocked" : "queued", missing, hosted?"hosted":"self-hosted"]);
     await audit(q,project.id,requestedBy || 'Project member','qa.requested',`${payload.target?.kind || 'PR'} ${payload.target?.name || payload.pr?.number} · ${payload.revision}`);
     await queueNotification(q,project.id,missing ? 'blocked' : 'queued',`${payload.id}:queued`,notificationPayload(project,payload,{message:missing}));
     return { job: view(result.rows[0]), duplicate: false };
   });
 }
+export async function admitPolicy(q:Database['query'],projectId:string,settings:Settings,excludeId?:string){const policy=await policyFor(q,projectId);if(!policy.allowedBackends.includes(settings.backend)||policy.approvedModels.length&&[settings.model,...Object.values(settings.roleModels)].filter(Boolean).some(m=>!policy.approvedModels.includes(m!)))throw new JobError(403,'The selected backend or model is outside the current approved model policy.');if(policy.requireRepoVerification&&!(await q("SELECT project_id FROM qa_repository_authorizations WHERE project_id=$1 AND verified_at>now()-interval '7 days' AND owner_id=(SELECT owner_id FROM projects WHERE id=$1)",[projectId])).rows.length)throw new JobError(403,'Fresh repository authorization is required by this project policy.');const committed=(await q<{usd:string}>("SELECT COALESCE(sum((payload->'settings'->>'maxCostUsd')::numeric),0) AS usd FROM qa_jobs WHERE project_id=$1 AND ($2::text IS NULL OR id<>$2) AND created_at>=date_trunc('month',now()) AND (status IN ('queued','running','completed') OR attempts>0)",[projectId,excludeId||null])).rows[0];if(Number(committed.usd)+settings.maxCostUsd>policy.monthlyInferenceBudgetUsd)throw new JobError(409,'Monthly reserved inference budget would be exceeded. Review committed work or change the owner policy deliberately.');}
 export async function changeJob(database: Database, project: QueueProject, id: string, action: "retry" | "cancel", actor = "Project member") {
   return transaction(database, project.id, async q => {
     await expire(q, project.id);
@@ -64,11 +75,13 @@ export async function changeJob(database: Database, project: QueueProject, id: s
       await queueNotification(q,project.id,'cancelled',`${id}:cancelled`,notificationPayload(project,row.payload));
       return view(result.rows[0]);
     }
+    if ((row as Row & {execution_mode?:string}).execution_mode==='hosted') throw new JobError(409,'Request a new hosted run after reviewing the blocked reason. A new request keeps prior compute and inference costs visible.');
     if (!["blocked", "failed"].includes(row.status) || row.attempts >= 3) throw new JobError(409, "Only blocked or failed jobs below three attempts can be retried.");
     if ((!row.payload.target || row.payload.target.platform === "web") && (!row.payload.testingProfile.previewUrlTemplate || !row.payload.testingProfile.goals.goals.length) || row.payload.settings.roles.some(role => !row.payload.settings.roleModels[role] && !row.payload.settings.model)) throw new JobError(409, "This immutable job lacks preview expectations or model selection. Save the configuration and request a new run.");
     if (!project.runner?.ready || !runnerOnline(project.agent_last_seen ? iso(project.agent_last_seen) : null)) throw new JobError(409, "Connect an enrolled ready runner before retrying.");
     const count = await q<{ count: string }>("SELECT count(*) AS count FROM qa_jobs WHERE project_id=$1 AND status IN ('queued','running')", [project.id]);
     if (Number(count.rows[0].count) >= 20) throw new JobError(409, "The project job queue is full.");
+    await admitPolicy(q,project.id,row.payload.settings,row.id);
     const result = await q<Row>("UPDATE qa_jobs SET status='queued', message='Explicit retry requested; the runner must resume its existing job evidence.', lease_hash=NULL, lease_expires_at=NULL, updated_at=now() WHERE id=$1 RETURNING *", [id]);
     await audit(q,project.id,actor,'qa.retried',id);
     await queueNotification(q,project.id,'queued',`${id}:retry:${row.attempts}`,notificationPayload(project,row.payload));
@@ -77,7 +90,7 @@ export async function changeJob(database: Database, project: QueueProject, id: s
 }
 export function runnerFits(runner:Runner,job:JobInput) {
   const browser=!job.target || job.target.platform==='web';
-  return runner.ready && runner.executeJobs && runner.backends.includes(job.settings.backend) && (!job.target || !!runner.platforms?.includes(job.target.platform)) && (!job.unitTests?.length || runner.workspaceTests===true) && (!browser || job.testingProfile.browsers.every(b=>runner.browsers.includes(b)) && job.testingProfile.maxPages<=runner.maxPages) && job.settings.maxCostUsd<=runner.maxCostUsd && job.settings.maxCallsPerRun<=runner.maxCallsPerRun;
+  return runner.ready && runner.executeJobs && (!job.qualityPlan||runner.qualityPlans===true) && runner.backends.includes(job.settings.backend) && (!job.target || !!runner.platforms?.includes(job.target.platform)) && (!job.unitTests?.length || runner.workspaceTests===true) && (!browser || job.testingProfile.browsers.every(b=>runner.browsers.includes(b)) && job.testingProfile.maxPages<=runner.maxPages) && job.settings.maxCostUsd<=runner.maxCostUsd && job.settings.maxCallsPerRun<=runner.maxCallsPerRun;
 }
 function notificationPayload(project:{repository:string},job:JobInput,extra:Record<string,unknown>={}) {return {repository:project.repository,revision:job.revision,...(job.target ? {target:job.target}:{pr:job.pr}),requestedBy:job.requestedBy,jobId:job.id,...extra};}
 export async function claimJob(database: Database, project: QueueProject, body: unknown) {
@@ -89,8 +102,9 @@ export async function claimJob(database: Database, project: QueueProject, body: 
     const running = await q<{runner_id:string}>("SELECT runner_id FROM qa_jobs WHERE project_id=$1 AND status='running'",[project.id]);
     const capacity=(await q<{max_parallel:number}>('SELECT max_parallel FROM projects WHERE id=$1',[project.id])).rows[0].max_parallel;
     if(running.rows.length>=capacity || running.rows.some(r=>r.runner_id===runnerId))return {job:null};
-    const candidates=await q<Row>("SELECT * FROM qa_jobs WHERE project_id=$1 AND status='queued' AND attempts<3 ORDER BY created_at,id LIMIT 20 FOR UPDATE",[project.id]);
-    const next={rows:candidates.rows.filter(row=>runnerFits(enrolled.payload,row.payload)).slice(0,1)};
+    const candidates=await q<Row>("SELECT * FROM qa_jobs WHERE project_id=$1 AND status='queued' AND attempts<3 AND execution_mode='self-hosted' ORDER BY created_at,id LIMIT 20 FOR UPDATE",[project.id]);
+    const permitted:Row[]=[];for(const row of candidates.rows){try{await admitPolicy(q,project.id,row.payload.settings,row.id);if(runnerFits(enrolled.payload,row.payload))permitted.push(row);}catch(e){if(!(e instanceof JobError))throw e;await q("UPDATE qa_jobs SET status='blocked',message=$3,updated_at=now() WHERE project_id=$1 AND id=$2",[project.id,row.id,'Project policy or reserved budget changed. Inspect settings before retrying.']);await audit(q,project.id,'Policy','qa.policy_blocked',row.id);}}
+    const next={rows:permitted.slice(0,1)};
     if (!next.rows.length) return { job: null };
     const leaseToken = randomBytes(32).toString("base64url");
     const result = await q<Row>("UPDATE qa_jobs SET status='running', attempts=attempts+1, runner_id=$2, lease_hash=$3, lease_expires_at=now()+interval '5 minutes', message='', updated_at=now() WHERE id=$1 RETURNING *", [next.rows[0].id, runnerId, tokenHash(leaseToken)]);

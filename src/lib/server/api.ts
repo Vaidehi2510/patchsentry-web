@@ -1,3 +1,11 @@
+import {after} from 'next/server';
+import {startHosted,stopHosted,completeHosted,verifyHostedInfrastructure} from './hosted';
+import {providerStatus,connectProvider,removeProvider,probeProvider} from './provider-vault';
+import {maintenance} from './maintenance';
+import {planSnapshot,qualityView,saveRequirement,saveBrief,saveBug,updateBug,metrics,saveUsage,policyFor,requirementCoverage} from './quality';
+import {uploadEvidence,evidenceList,downloadEvidence} from './evidence';
+import {verifyRepository,repositoryProof} from './repository-authorization';
+import {PolicySchema} from '../quality';
 import {revokeDevices} from './trusted-devices';
 import {accountEndpoint} from './account';
 import {domainState,configureDomain,verifyDomain} from './work-domain';
@@ -37,7 +45,7 @@ const CreateProject = z
       .max(201),
   })
   .strict();
-const ChangeProject = z.object({ settings: SettingsSchema.optional(), testingProfile: TestingProfileSchema.optional() }).strict().refine(v => v.settings || v.testingProfile);
+const ChangeProject = z.object({ executionMode:z.enum(["hosted","self-hosted"]).optional(), settings: SettingsSchema.optional(), testingProfile: TestingProfileSchema.optional() }).strict().refine(v => v.settings || v.testingProfile || v.executionMode);
 const Heartbeat = z
   .object({
     models: z
@@ -66,6 +74,7 @@ type ProjectRow = {
   access_role?: AccessRole;
   slack_settings?: unknown;
   max_parallel?: number;
+  execution_mode?: "hosted" | "self-hosted";
 };
 
 export class ApiError extends Error {
@@ -90,6 +99,7 @@ function iso(value: Date | string) {
 }
 function projectView(row: ProjectRow): Project {
   return {
+    executionMode: row.execution_mode || "self-hosted",
     id: row.id,
     accessRole: row.access_role || "owner",
     maxParallel: row.max_parallel || 1,
@@ -295,6 +305,18 @@ async function dispatch(
       503,
       "Account storage is not configured. Set the database and authentication environment variables.",
     );
+  const hostedResult=/^\/api\/internal\/hosted\/([a-f0-9-]{36})(?:\/(stop|evidence)(?:\/([a-f0-9-]{36}))?)?$/.exec(path);
+  if(hostedResult&&request.method==='POST'){
+    if(!hostedResult[2])return json(await completeHosted(runtime,hostedResult[1],request,sanitize(await readBody(request))));
+    const capability=request.headers.get('authorization')?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1];
+    const row=capability?(await runtime.database.query<{project_id:string;record_id:string;status:string}>("SELECT project_id,record_id,status FROM qa_jobs WHERE id=$1 AND callback_hash=$2 AND hosted_expires_at>now() AND execution_mode='hosted'",[hostedResult[1],createHash('sha256').update(capability).digest('hex')])).rows[0]:null;
+    if(!row)throw new ApiError(403,'Invalid or expired job capability.');
+    if(hostedResult[2]==='evidence'&&hostedResult[3]&&row.status==='completed')return json(await uploadEvidence(runtime,row.project_id,row.record_id,hostedResult[3],request));
+    if(hostedResult[2]==='stop'&&['completed','blocked','failed','cancelled'].includes(row.status)){(runtime.defer||after)(()=>stopHosted(runtime,row.project_id,hostedResult[1]));return json({ok:true});}
+    throw new ApiError(409,'This hosted job cannot accept that action.');
+  }
+  if(path==='/api/internal/hosted-check'&&request.method==='POST')return json(await verifyHostedInfrastructure(request,runtime));
+  if(path==='/api/internal/maintenance' &&request.method==='GET')return json(await maintenance(request,runtime));
   if(path.startsWith('/api/account')){if(request.method!=='GET')requireOrigin(request,runtime.config.origin);return accountEndpoint(request,runtime,request.method==='GET'?undefined:await readBody(request));}
   if(path.startsWith('/api/security/')){if(request.method!=='GET')requireOrigin(request,runtime.config.origin);return securityEndpoint(request,runtime,request.method==='POST'?await readBody(request):undefined);}
   if (path.startsWith("/api/auth/")) {
@@ -318,6 +340,11 @@ async function dispatch(
   }
   if (path.startsWith("/api/agent/")) {
     const project = await agentProject(request, runtime);
+    const attachment=/^\/api\/agent\/runs\/([a-f0-9]{64})\/evidence\/([a-f0-9-]{36})$/.exec(path);
+    if(attachment&&request.method==='PUT')return json(await uploadEvidence(runtime,project.id,attachment[1],attachment[2],request));
+    const usage=/^\/api\/agent\/runs\/([a-f0-9]{64})\/usage$/.exec(path);
+    if(usage&&request.method==='PUT')return json(await saveUsage(runtime.database,project.id,usage[1],sanitize(await readBody(request))));
+
     if(path==='/api/agent/model-setup/claim'&&request.method==='POST')return json(await claimModelSetup(runtime,project.id,await readBody(request)));
     const modelSetupAck=/^\/api\/agent\/model-setup\/([a-f0-9-]{36})\/complete$/.exec(path);
     if(modelSetupAck&&request.method==='POST')return json(await completeModelSetup(runtime,project.id,modelSetupAck[1],sanitize(await readBody(request))));
@@ -328,7 +355,7 @@ async function dispatch(
       const target = parse(AssessmentTargetSchema, { kind: url.searchParams.get("kind"), name: url.searchParams.get("name"), platform: url.searchParams.get("platform"), artifactSha256: url.searchParams.get("artifactSha256") });
       const result = await runtime.database.query<{ payload: Run }>("SELECT payload FROM qa_runs WHERE project_id=$1 AND record_id=$2", [project.id, recordId]);
       if (!result.rows[0]) throw new ApiError(404, "Release report not found for this project.");
-      return json({ recordId, ...releaseGate(result.rows[0].payload, { revision, target }) });
+      const gate=releaseGate(result.rows[0].payload,{revision,target}),policy=await policyFor(runtime.database.query.bind(runtime.database),project.id);if(policy.requirePlanForRelease){const plan=await planSnapshot(runtime.database.query.bind(runtime.database),project.id),coverage=requirementCoverage(plan,result.rows[0].payload);if(!coverage.length||coverage.some(r=>['critical','high'].includes(r.risk)&&r.status!=='passed')){gate.eligible=false;gate.reasons.push('Current critical/high requirements lack passing automated evidence for this plan and test configuration.');}}const open=(await runtime.database.query("SELECT id FROM qa_bugs WHERE project_id=$1 AND status IN ('open','confirmed','reopened') AND payload->>'severity' IN ('critical','high')",[project.id])).rows;if(open.length){gate.eligible=false;gate.reasons.push('Unresolved critical/high product bugs require triage before release.');}return json({recordId,...gate});
     }
     if (path === "/api/agent/config" && request.method === "GET")
       return json({
@@ -389,6 +416,7 @@ async function dispatch(
         `INSERT INTO qa_runs (project_id, record_id, payload) VALUES ($1, $2, $3::jsonb)
         ON CONFLICT (project_id, record_id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
         WHERE qa_runs.payload->>'revision' = EXCLUDED.payload->>'revision'
+          AND (qa_runs.payload->>'qualityPlanDigest') IS NOT DISTINCT FROM (EXCLUDED.payload->>'qualityPlanDigest')
           AND (qa_runs.payload->'pr'->>'number') IS NOT DISTINCT FROM (EXCLUDED.payload->'pr'->>'number')
           AND (qa_runs.payload->'target') IS NOT DISTINCT FROM (EXCLUDED.payload->'target')
         RETURNING record_id`,
@@ -409,6 +437,29 @@ async function dispatch(
   }
   if (request.method !== "GET") requireOrigin(request, runtime.config.origin);
   const user = await userFor(request, runtime);
+
+  const provider=/^\/api\/projects\/([a-f0-9-]{36})\/provider\/openrouter(?:\/(probe))?$/.exec(path);
+  if(provider){const p=await accessibleProject(runtime,provider[1],user.id,request.method==='GET'?'viewer':'admin');if(request.method==='GET')return json(await providerStatus(runtime,p.id));if(request.method==='POST')return json(provider[2]?await probeProvider(runtime,p.id,await readBody(request)):await connectProvider(runtime,p.id,await readBody(request),user.name));if(request.method==='DELETE'&&!provider[2])return json(await removeProvider(runtime,p.id,user.name));throw new ApiError(405,'Method not allowed.');}
+  const quality=/^\/api\/projects\/([a-f0-9-]{36})\/(quality|requirements|bugs|metrics|quality-policy|repository-authorization|evidence|audit-export|retention)(?:\/([a-f0-9-]{36}|brief|export))?$/.exec(path);
+  if(quality){const area=quality[2],id=quality[3],project=await accessibleProject(runtime,quality[1],user.id,request.method==='GET'?'viewer':['quality-policy','repository-authorization','retention'].includes(area)?'owner':'qa');
+    if(area==='quality'&&request.method==='GET')return json(await qualityView(runtime.database,project.id));
+    if(area==='quality'&&id==='brief'&&request.method==='PATCH')return json(await saveBrief(runtime.database,project.id,sanitize(await readBody(request)),user.name));
+    if(area==='requirements'&&['POST','PATCH'].includes(request.method))return json(await saveRequirement(runtime.database,project.id,id,sanitize(await readBody(request)),user.name),id?200:201);
+    if(area==='bugs'&&request.method==='GET'){const rows=(await runtime.database.query('SELECT * FROM qa_bugs WHERE project_id=$1 ORDER BY updated_at DESC LIMIT 500',[project.id])).rows;if(id==='export')return new Response(rows.map(r=>JSON.stringify(r)).join('\n'),{headers:{'content-type':'application/x-ndjson','content-disposition':'attachment; filename="patchsentry-bugs.ndjson"','cache-control':'no-store'}});return json({bugs:rows});}
+    if(area==='bugs'&&request.method==='POST'&&!id)return json(await saveBug(runtime.database,project.id,sanitize(await readBody(request)),user.name),201);
+    if(area==='bugs'&&request.method==='PATCH'&&id)return json(await updateBug(runtime.database,project.id,id,sanitize(await readBody(request)),user.name));
+    if(area==='metrics'&&request.method==='GET')return json(await metrics(runtime.database,project.id));
+    if(area==='quality-policy'&&request.method==='GET')return json({policy:await policyFor(runtime.database.query.bind(runtime.database),project.id)});
+    if(area==='quality-policy'&&request.method==='PATCH'){const policy=parse(PolicySchema,await readBody(request));await runtime.database.query('UPDATE projects SET quality_policy=$2::jsonb WHERE id=$1',[project.id,JSON.stringify(policy)]);await audit(runtime.database.query.bind(runtime.database),project.id,user.name,'quality.policy_updated','Retention, model approval and budget policy updated');return json({policy});}
+    if(area==='repository-authorization'&&request.method==='GET')return json({authorization:await repositoryProof(runtime,project.id)});
+    if(area==='repository-authorization'&&request.method==='POST')return json(await verifyRepository(runtime,project,user.id,user.name,await readBody(request)));
+    if(area==='evidence'&&request.method==='GET'&&id)return downloadEvidence(runtime,project.id,id,user.name);
+    if(area==='audit-export'&&request.method==='GET'){if((project.access_role||'owner')!=='owner'&&(project.access_role||'owner')!=='admin')throw new ApiError(403,'Audit exports require an owner or admin.');const rows=(await runtime.database.query('SELECT id,actor,action,detail,created_at FROM qa_activity WHERE project_id=$1 ORDER BY created_at,id LIMIT 10000',[project.id])).rows;return new Response(rows.map(r=>JSON.stringify(r)).join('\n'),{headers:{'content-type':'application/x-ndjson','content-disposition':'attachment; filename="patchsentry-audit.ndjson"','cache-control':'no-store'}});}
+    if(area==='retention'&&request.method==='POST'){const removed=await runtime.database.query('DELETE FROM qa_evidence WHERE project_id=$1 AND expires_at<=now() RETURNING id',[project.id]);await audit(runtime.database.query.bind(runtime.database),project.id,user.name,'evidence.expired_purged',String(removed.rows.length));return json({purged:removed.rows.length});}
+    throw new ApiError(405,'Method not allowed.');
+  }
+  const attachments=/^\/api\/projects\/([a-f0-9-]{36})\/runs\/([a-f0-9]{64})\/evidence$/.exec(path);
+  if(attachments&&request.method==='GET'){const p=await accessibleProject(runtime,attachments[1],user.id);return json(await evidenceList(runtime,p.id,attachments[2]));}
   const domainMatch=/^\/api\/projects\/([a-f0-9-]{36})\/domain(?:\/(verify))?$/.exec(path);
   if(domainMatch){const p=await accessibleProject(runtime,domainMatch[1],user.id,'admin');if(request.method==='GET'&&!domainMatch[2])return json(await domainState(runtime,p.id));if(request.method==='POST')return json(domainMatch[2]?await verifyDomain(runtime,p.id):await configureDomain(runtime,p.id,await readBody(request)));if(request.method==='DELETE'&&!domainMatch[2]){await runtime.database.query('DELETE FROM qa_work_domains WHERE project_id=$1',[p.id]);return json({removed:true});}throw new ApiError(405,'Method not allowed.');}
   const modelSetup=/^\/api\/projects\/([a-f0-9-]{36})\/model-connections$/.exec(path);
@@ -479,8 +530,8 @@ async function dispatch(
   if (jobMatch) {
     const project = await accessibleProject(runtime, jobMatch[1], user.id, request.method === "GET" ? "viewer" : "qa");
     if (!jobMatch[2] && request.method === "GET") return json({ jobs: await listJobs(runtime.database, project.id) });
-    if (!jobMatch[2] && request.method === "POST") return json(await createJob(runtime.database, project, await readBody(request), user.name), 201);
-    if (jobMatch[2] && request.method === "POST") return json({ job: await changeJob(runtime.database, project, jobMatch[2], jobMatch[3] as "retry" | "cancel", user.name) });
+    if (!jobMatch[2] && request.method === "POST") { const result=await createJob(runtime.database, project, await readBody(request), user.name); if(project.execution_mode==='hosted'&&project.settings.backend==='openrouter'&&result.job.status==='queued')(runtime.defer||after)(()=>startHosted(runtime,project.id,result.job.id));return json(result,201); }
+    if (jobMatch[2] && request.method === "POST") {const job=await changeJob(runtime.database, project, jobMatch[2], jobMatch[3] as "retry" | "cancel", user.name);if(jobMatch[3]==='cancel'&&project.execution_mode==='hosted')(runtime.defer||after)(()=>stopHosted(runtime,project.id,job.id));return json({job});}
     throw new ApiError(405, "Method not allowed.");
   }
   const testsMatch = /^\/api\/projects\/([a-f0-9-]{36})\/tests(?:\/([a-f0-9-]{36}))?$/.exec(path);
@@ -496,6 +547,7 @@ async function dispatch(
   if (projectMatch) {
     const project = await accessibleProject(runtime, projectMatch[1], user.id, request.method === "GET" ? "viewer" : projectMatch[2] === "token" || request.method === "DELETE" ? "owner" : "admin");
     if (projectMatch[2] === "token" && request.method === "POST") {
+      if((await policyFor(runtime.database.query.bind(runtime.database),project.id)).requireRepoVerification&&!await repositoryProof(runtime,project.id))throw new ApiError(403,'Verify repository authorization before issuing a runner token.');
       const token = "pst_" + randomBytes(32).toString("base64url");
       await runtime.database.query(
         "UPDATE projects SET agent_token_hash = $1, agent_email_verified=true, runner=NULL, agent_last_seen=NULL, updated_at = now() WHERE id = $2 AND owner_id = $3",
@@ -523,8 +575,8 @@ async function dispatch(
       const input = parse(ChangeProject, await readBody(request));
       if (input.settings) await validateSettings(input.settings, project, runtime);
       const result = await runtime.database.query<ProjectRow>(
-        "UPDATE projects SET settings = $1::jsonb, testing_profile=$3::jsonb, updated_at = now() WHERE id = $2 RETURNING *",
-        [JSON.stringify(input.settings || project.settings), project.id, JSON.stringify(input.testingProfile || project.testing_profile || testingDefaults)],
+        "UPDATE projects SET settings = $1::jsonb, testing_profile=$3::jsonb, execution_mode=$4, updated_at = now() WHERE id = $2 RETURNING *",
+        [JSON.stringify(input.settings || project.settings), project.id, JSON.stringify(input.testingProfile || project.testing_profile || testingDefaults),input.executionMode||project.execution_mode||"self-hosted"],
       );
       await audit(runtime.database.query.bind(runtime.database),project.id,user.name,'project.settings','Models or trusted testing profile updated');
       return json({ project: projectView({...result.rows[0],access_role:project.access_role}) });

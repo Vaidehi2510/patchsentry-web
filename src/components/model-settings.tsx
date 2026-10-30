@@ -21,6 +21,7 @@ import {
   type Settings,
   type CatalogModel,
 } from "@/lib/contracts";
+import {HostedModelSetup} from "./hosted-model-setup";
 import {ModelConnectionSetup} from "./model-connection-setup";
 import { api } from "./workspace";
 
@@ -33,6 +34,7 @@ export function ModelSettings({
   demo: boolean;
   onSave: (p: Project) => void;
 }) {
+  const [advanced,setAdvanced]=useState(false);
   const [settings, setSettings] = useState<Settings>(project.settings),
     [models, setModels] = useState<CatalogModel[]>([]),
     [query, setQuery] = useState(""),
@@ -159,18 +161,18 @@ export function ModelSettings({
           </span>
         </button>
       </div>
-      <ModelConnectionSetup project={project} backend={settings.backend} selectedModel={settings.model} demo={demo} onInventory={onSave}/>
+      {settings.backend==='openrouter'?<><HostedModelSetup projectId={project.id} model={settings.model} demo={demo} onConnected={async()=>{const data=await api(`/api/projects/${project.id}`);onSave(data.project);}}/><details onToggle={e=>setAdvanced(e.currentTarget.open)}><summary>Advanced: use your own runner instead</summary>{advanced&&<><button type="button" className="button button-secondary" onClick={async()=>{try{const data=await api(`/api/projects/${project.id}`,{method:'PATCH',body:JSON.stringify({executionMode:'self-hosted'})});onSave(data.project);setMessage('Private runner execution selected. Hosted key storage is unchanged; connecting a key above selects hosted execution again.');}catch(e){setError((e as Error).message);}}}>Use self-hosted execution</button><ModelConnectionSetup project={project} backend={settings.backend} selectedModel={settings.model} demo={demo} onInventory={onSave}/></>}</details></>:<ModelConnectionSetup project={project} backend={settings.backend} selectedModel={settings.model} demo={demo} onInventory={onSave}/>}
       <div className="notice model-notice">
         <ShieldCheck size={19} />
         <div>
           <strong>
             {settings.backend === "openrouter"
-              ? "Your key stays on your runner."
+              ? "Hosted QA, configured on the website."
               : "Local inference. Outbound reporting."}
           </strong>
           <p>
             {settings.backend === "openrouter"
-              ? "Use guided setup, or set OPENROUTER_API_KEY directly on your runner. The guided setup above can verify and securely deliver your key to an enrolled runner. Provider charges and runner costs are separate."
+              ? "Connect your key above, save your model choices, then request QA in Testing setup. Patchsentry manages the cloud worker. OpenRouter credits and hosted execution allowances are separate. The advanced connector is optional."
               : "The runner contacts your local model server. This website cannot reach your localhost. Use guided discovery above to configure the endpoint and actual model profiles; they appear below after the runner checks in. Reports still upload to this workspace."}
           </p>
         </div>

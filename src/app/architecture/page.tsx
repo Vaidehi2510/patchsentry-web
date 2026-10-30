@@ -5,11 +5,11 @@ import { TeamAccessGuide } from "@/components/team-access-guide";
 export const metadata = { title: "How Patchsentry fits together" };
 export default function Architecture() {
   return (
-    <MarketingShell><PageIntro eyebrow="A PRACTICAL CONNECTION GUIDE" title={<>One workspace.<br/>A runner you control.</>} description="Patchsentry coordinates QA. The separate QA engine runs it. Your product stays in its own repository."/>
+    <MarketingShell><PageIntro eyebrow="A PRACTICAL CONNECTION GUIDE" title={<>One workspace.<br/>Managed QA execution.</>} description="Patchsentry coordinates QA. The separate QA engine runs it. Your product stays in its own repository."/>
       <div className="container section architecture-guide">
         <div className="docs-content">
           <section>
-            <h2>The everyday flow</h2>
+            <h2>The everyday flow</h2><p>Connect OpenRouter, select models, save a public preview and test expectations, and request QA on the website. Patchsentry provisions and stops hosted web workers. Keep the connector only if you need local models, private-network access or native device suites.</p>
             <ol>
               <li>
                 Your product repository contains your application. Give the QA
@@ -25,11 +25,10 @@ export default function Architecture() {
               <li>
                 The <strong>QA-testbot</strong> repository contains the
                 execution engine: code inspection, AI specialists, browser
-                checks, isolated tests and evidence. Install it on your trusted
-                runner, outside the product checkout.
+                checks, isolated tests and evidence. Patchsentry installs a pinned engine version in a managed worker for hosted web QA. You do not need to install this repository yourself.
               </li>
               <li>
-                The connector from{" "}
+                For optional private/self-hosted execution, the connector from{" "}
                 <code>patchsentry-web/scripts/agent.mjs</code> runs on that same
                 trusted machine. It polls the website for jobs, invokes the QA
                 engine under a locally reviewed policy, and uploads bounded

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {uploadRunnerEvidence} from "./evidence-upload.mjs";
 import {prepareModelSetup,processModelSetup,setupEnvironment} from "./model-setup.mjs";
 import { drainTeamUpdates } from "./team-updates.mjs";
 import { assessmentIdentity, sameAssessment } from "./assessment.mjs";
@@ -412,10 +413,12 @@ export class PortalClient {
     this.fetch = fetchImpl;
     this.timeoutMs = timeoutMs;
   }
+  async uploadEvidence(recordId,metadata,bytes){if(!/^[a-f0-9]{64}$/.test(recordId)||!/^[a-f0-9-]{36}$/.test(metadata.id)||!Buffer.isBuffer(bytes)||bytes.length>2*1024*1024)fail("Invalid evidence upload");const response=await this.fetch(`${this.origin}/api/agent/runs/${recordId}/evidence/${metadata.id}`,{method:"PUT",redirect:"error",credentials:"omit",signal:AbortSignal.timeout(this.timeoutMs),headers:{Authorization:`Bearer ${this.token}`,"content-type":metadata.mime,"x-patchsentry-evidence":Buffer.from(JSON.stringify(metadata)).toString("base64url")},body:bytes});if(!response.ok)fail(`Evidence upload was not confirmed (HTTP ${response.status}).`);return {saved:true};}
   async request(method, endpoint, body) {
     if (
       !["/api/agent/config", "/api/agent/heartbeat", "/api/agent/jobs/claim", "/api/agent/model-setup/claim"].includes(endpoint) &&
       !/^\/api\/agent\/runs\/[a-f0-9]{64}$/.test(endpoint) &&
+      !/^\/api\/agent\/runs\/[a-f0-9]{64}\/usage$/.test(endpoint) &&
       !/^\/api\/agent\/jobs\/[a-f0-9-]{36}\/(lease|complete)$/.test(endpoint) &&
       !/^\/api\/agent\/model-setup\/[a-f0-9-]{36}\/complete$/.test(endpoint)
     )
@@ -805,7 +808,7 @@ export async function syncOnce({
     uploaded++;
   }
   const updatesBefore = options.slackUpdates ? await drainTeamUpdates({bot,portal,env,enabled:true,trustedPath}) : undefined;
-  const job = options.executeJobs ? await runClaimedJob({ runner, bot, portal, models: localInventory(bot.config), env:modelEnvironment, readJson, trustedPath, sanitizeText, signal: options.signal, githubContext: options.githubContext, onStarted:options.slackUpdates ? ()=>drainTeamUpdates({bot,portal,env,enabled:true,trustedPath}) : undefined }) : undefined;
+  const job = options.executeJobs ? await runClaimedJob({ runner, bot, portal, models: localInventory(bot.config), env:modelEnvironment, uploadEvidence:options.uploadEvidence, readJson, trustedPath, sanitizeText, signal: options.signal, githubContext: options.githubContext, onStarted:options.slackUpdates ? ()=>drainTeamUpdates({bot,portal,env,enabled:true,trustedPath}) : undefined }) : undefined;
   const updates = options.slackUpdates ? await drainTeamUpdates({bot,portal,env,enabled:true,trustedPath}) : undefined;
   return {
     dryRun: false,
@@ -833,6 +836,7 @@ export function parseArgs(args) {
     "--execute-jobs": "executeJobs",
     "--check-runner": "checkRunner",
     "--allow-model-setup": "allowModelSetup",
+    "--upload-evidence":"uploadEvidence",
     "--slack-updates": "slackUpdates",
     "--github-context": "githubContext",
     "--help": "help",
@@ -882,7 +886,7 @@ export async function main(args = process.argv.slice(2)) {
   const options = parseArgs(args);
   if (options.help) {
     console.log(
-      "Usage: node scripts/agent.mjs --bot-dir /path/to/qa-signoff-bot [--state .qa-local/state.json] [--config qa-config.json] [--watch] [--interval 30] [--apply-model-settings] [--allow-model-setup] [--allow-backends openrouter,local] [--allow-images] [--allow-http-loopback] [--execute-jobs --runner-policy portal-policy.json] [--check-runner] [--dry-run]\nSet QA_PORTAL_URL and QA_PORTAL_TOKEN in the environment. Default sync never writes local files; execution requires explicit local enrollment.",
+      "Usage: node scripts/agent.mjs --bot-dir /path/to/qa-signoff-bot [--state .qa-local/state.json] [--config qa-config.json] [--watch] [--interval 30] [--apply-model-settings] [--allow-model-setup] [--upload-evidence] [--allow-backends openrouter,local] [--allow-images] [--allow-http-loopback] [--execute-jobs --runner-policy portal-policy.json] [--check-runner] [--dry-run]\nSet QA_PORTAL_URL and QA_PORTAL_TOKEN in the environment. Default sync never writes local files; execution requires explicit local enrollment.",
     );
     return;
   }

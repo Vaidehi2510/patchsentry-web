@@ -1,3 +1,4 @@
+import {policyDefaults} from '../src/lib/quality';
 import {secureSession} from './auth-session';
 import test,{before,after} from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,7 +19,7 @@ before(async()=>{const database=await createPGliteDatabase();await migrateDataba
 after(async()=>runtime.database.end());
 const runner={id:'b'.repeat(64),executeJobs:true,ready:true,missing:[],browsers:['chromium'],backends:['local'],maxPages:4,maxCostUsd:2,maxCallsPerRun:20,platforms:['windows'],workspaceTests:true};
 const target={kind:'release',name:'v3.0',platform:'windows',artifactSha256:'d'.repeat(64)};
-async function project(){const p=(await(await api('/api/projects','POST',{name:'Company product',repository:`company/product-${randomUUID()}`})).json()).project;const token=(await(await api(`/api/projects/${p.id}/token`,'POST',{})).json()).token;await api('/api/agent/heartbeat','POST',{models:[{id:'qa:8b',name:'QA',contextLength:8192,tools:true,vision:false}],runner},'owner',token);await api(`/api/projects/${p.id}`,'PATCH',{settings:{...settingsDefaults,backend:'local',model:'qa:8b',roles:['planner']}},'owner');return {...p,token};}
+async function project(){const p=(await(await api('/api/projects','POST',{name:'Company product',repository:`company/product-${randomUUID()}`})).json()).project;await runtime.database.query('UPDATE projects SET quality_policy=$2::jsonb WHERE id=$1',[p.id,JSON.stringify({...policyDefaults,requirePlanForRelease:false,monthlyInferenceBudgetUsd:100000})]);const token=(await(await api(`/api/projects/${p.id}/token`,'POST',{})).json()).token;await api('/api/agent/heartbeat','POST',{models:[{id:'qa:8b',name:'QA',contextLength:8192,tools:true,vision:false}],runner},'owner',token);await api(`/api/projects/${p.id}`,'PATCH',{settings:{...settingsDefaults,backend:'local',model:'qa:8b',roles:['planner']}},'owner');return {...p,token};}
 async function add(p:any,who:string,role:string){const r=await api(`/api/projects/${p.id}/team`,'POST',{email:`${who}@example.test`,role});assert.equal(r.status,201);const {token}=await r.json();const joined=await api('/api/invitations/accept','POST',{token},who);assert.equal(joined.status,200);return token;}
 async function queue(p:any,name=target.name){const r=await api(`/api/projects/${p.id}/jobs`,'POST',{target:{...target,name},revision:'a'.repeat(40),dedupeKey:randomUUID()});assert.equal(r.status,201);return (await r.json()).job;}
 

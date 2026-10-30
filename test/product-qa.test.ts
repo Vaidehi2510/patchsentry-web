@@ -1,3 +1,4 @@
+import {policyDefaults} from '../src/lib/quality';
 import {secureSession} from './auth-session';
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,7 +19,7 @@ after(async()=>{await runtime?.database.end();});
 const runner={id:'b'.repeat(64),executeJobs:true,ready:true,missing:[],browsers:['chromium'],backends:['local'],maxPages:4,maxCostUsd:2,maxCallsPerRun:20,platforms:['web','api','android','ios','macos','windows','linux'],workspaceTests:true};
 const target={kind:'release',name:'v1.4.0',platform:'windows',artifactSha256:'d'.repeat(64)};
 const code="const test=require('node:test'); const assert=require('node:assert/strict'); test('fixture',()=>assert.equal(2+2,4));";
-async function project(owner=alice,capabilities:Record<string,unknown>={}) { const created=await call('/api/projects','POST',{name:'Personal product',repository:`builder/product-${randomUUID()}`},owner);assert.equal(created.status,201);const p=(await created.json()).project;const token=(await(await call(`/api/projects/${p.id}/token`,'POST',{},owner)).json()).token;assert.equal((await call('/api/agent/heartbeat','POST',{models:[{id:'qa:8b',name:'QA',contextLength:8192,tools:true,vision:false}],runner:{...runner,...capabilities}},undefined,token)).status,200);assert.equal((await call(`/api/projects/${p.id}`,'PATCH',{settings:{...settingsDefaults,backend:'local',model:'qa:8b'}},owner)).status,200);return {...p,token};}
+async function project(owner=alice,capabilities:Record<string,unknown>={}) { const created=await call('/api/projects','POST',{name:'Personal product',repository:`builder/product-${randomUUID()}`},owner);assert.equal(created.status,201);const p=(await created.json()).project;await runtime.database.query('UPDATE projects SET quality_policy=$2::jsonb WHERE id=$1',[p.id,JSON.stringify({...policyDefaults,requirePlanForRelease:false,monthlyInferenceBudgetUsd:100000})]);const token=(await(await call(`/api/projects/${p.id}/token`,'POST',{},owner)).json()).token;assert.equal((await call('/api/agent/heartbeat','POST',{models:[{id:'qa:8b',name:'QA',contextLength:8192,tools:true,vision:false}],runner:{...runner,...capabilities}},undefined,token)).status,200);assert.equal((await call(`/api/projects/${p.id}`,'PATCH',{settings:{...settingsDefaults,backend:'local',model:'qa:8b'}},owner)).status,200);return {...p,token};}
 const queued=(p:any,subject:unknown={target})=>call(`/api/projects/${p.id}/jobs`,'POST',{...(subject as object),revision:'a'.repeat(40),dedupeKey:randomUUID()},alice);
 
 test('complete versions and CI builds queue and claim without a fabricated PR or browser requirement',async()=>{
