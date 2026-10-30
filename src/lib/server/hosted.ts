@@ -15,6 +15,7 @@ import {operatorAuthentication} from './maintenance';
 import {rate} from './session-security';
 import { policyFor } from './quality';
 
+const bootstrapDomains=['github.com','api.github.com','registry.npmjs.org','*.ubuntu.com','cdn.playwright.dev','playwright.download.prss.microsoft.com','storage.googleapis.com'];
 const hash = (v:string) => createHash('sha256').update(v).digest('hex');
 // Deny special-use networks even when an allowed hostname resolves to one later.
 export const deniedNetworks = ['0.0.0.0/8','10.0.0.0/8','100.64.0.0/10','127.0.0.0/8','169.254.0.0/16','172.16.0.0/12','192.0.0.0/24','192.0.2.0/24','192.168.0.0/16','198.18.0.0/15','198.51.100.0/24','203.0.113.0/24','224.0.0.0/4','240.0.0.0/4'];
@@ -40,7 +41,7 @@ export interface HostedAdapter {
   get(id:string):Promise<HostedSandbox>;
 }
 export const hostedAdapter:HostedAdapter={
-  async create(host,artifactHost){return Sandbox.create({persistent:false,timeout:15*60_000,resources:{vcpus:2},image:'vercel/sandbox/universal:latest',networkPolicy:{allow:[host,...(artifactHost?[artifactHost]:[]),'github.com','api.github.com','registry.npmjs.org','cdn.playwright.dev','playwright.download.prss.microsoft.com','storage.googleapis.com','*.ubuntu.com','openrouter.ai','patchsentry.vercel.app'],subnets:{deny:deniedNetworks}},tags:{app:'patchsentry',purpose:'hosted-qa'}});},
+  async create(host,artifactHost){return Sandbox.create({persistent:false,timeout:15*60_000,resources:{vcpus:2},image:'vercel/sandbox/universal:latest',networkPolicy:{allow:[host,...(artifactHost?[artifactHost]:[]),...bootstrapDomains,'openrouter.ai','patchsentry.vercel.app'],subnets:{deny:deniedNetworks}},tags:{app:'patchsentry',purpose:'hosted-qa'}});},
   async get(id){return Sandbox.get({name:id});},
 };
 type HostedRow={id:string;project_id:string;payload:JobInput;status:string;attempts:number;sandbox_id:string|null;callback_hash:string|null;hosted_expires_at:string|null;};
@@ -104,6 +105,6 @@ export async function completeHosted(runtime:Runtime,jobId:string,request:Reques
 export async function verifyHostedInfrastructure(request:Request,runtime:Runtime){
   operatorAuthentication(request,runtime);await rate(runtime,'hosted-infrastructure-diagnostic',10,86400);
   let sandbox:Sandbox;
-  try{sandbox=await Sandbox.create({persistent:false,timeout:300000,resources:{vcpus:2},image:'vercel/sandbox/universal:latest',networkPolicy:{allow:['github.com','api.github.com','registry.npmjs.org','*.ubuntu.com','cdn.playwright.dev','playwright.download.prss.microsoft.com'],subnets:{deny:deniedNetworks}},tags:{app:'patchsentry',purpose:'browser-diagnostic'}});}catch(e){const error=e as {name?:string;response?:Response;json?:{error?:{code?:string;message?:string}}};const name=/^[A-Za-z]{1,60}$/.test(error.name||'')?error.name:'UnknownError';const code=/^[a-z_]{1,60}$/.test(error.json?.error?.code||'')?error.json!.error!.code:'unspecified';const detail=error.response?.status===400?String(error.json?.error?.message||'').replace(/eyJ[A-Za-z0-9_.-]+/g,'[REDACTED]').slice(0,400):'';throw new JobError(503,`Hosted worker startup: ${name}; HTTP ${error.response?.status||0}; code ${code}. ${detail} No provider key or product data was used.`);}
+  try{sandbox=await Sandbox.create({persistent:false,timeout:300000,resources:{vcpus:2},image:'vercel/sandbox/universal:latest',networkPolicy:{allow:bootstrapDomains,subnets:{deny:deniedNetworks}},tags:{app:'patchsentry',purpose:'browser-diagnostic'}});}catch(e){const error=e as {name?:string;response?:Response;json?:{error?:{code?:string;message?:string}}};const name=/^[A-Za-z]{1,60}$/.test(error.name||'')?error.name:'UnknownError';const code=/^[a-z_]{1,60}$/.test(error.json?.error?.code||'')?error.json!.error!.code:'unspecified';const detail=error.response?.status===400?String(error.json?.error?.message||'').replace(/eyJ[A-Za-z0-9_.-]+/g,'[REDACTED]').slice(0,400):'';throw new JobError(503,`Hosted worker startup: ${name}; HTTP ${error.response?.status||0}; code ${code}. ${detail} No provider key or product data was used.`);}
   try{await sandbox.writeFiles([{path:'/vercel/sandbox/engine-revision.txt',content:await readFile(join(process.cwd(),'scripts/hosted-engine-revision.txt'))},{path:'/vercel/sandbox/hosted-system.cjs',content:await readFile(join(process.cwd(),'scripts/hosted-system.cjs'))},{path:'/vercel/sandbox/smoke.cjs',content:await readFile(join(process.cwd(),'scripts/hosted-smoke.cjs'))}]);const result=await sandbox.runCommand({cmd:'node',args:['/vercel/sandbox/smoke.cjs'],timeoutMs:270000});const output=(await result.stdout()).trim();if(result.exitCode!==0){let detail='';try{const d=JSON.parse(output);detail=String(d.stage)+': '+String(d.detail||'').slice(-900);}catch{}throw new JobError(503,'Hosted browser infrastructure check failed. '+detail);}return {ok:true,...JSON.parse(output)};}finally{await sandbox.stop();}
 }

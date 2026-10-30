@@ -3,7 +3,7 @@ const fs=require('node:fs');
 const root='/vercel/sandbox';
 let stage='network isolation';
 const command=(cmd,args,options={})=>execFileSync(cmd,args,{cwd:root,stdio:'pipe',timeout:60000,maxBuffer:2*1024*1024,...options});
-function fail(e){const stdout=String(e.stdout||'').slice(-700),stderr=String(e.stderr||'').slice(-500);console.log(JSON.stringify({error:'Hosted diagnostic failed',stage,exitStatus:e.status||null,detail:stdout||stderr||(e.message||'').slice(-1000)}));process.exit(1);}
+function fail(e){const stdout=String(e.stdout||'').slice(-700),stderr=String(e.stderr||'').slice(-500);console.log(JSON.stringify({error:'Hosted diagnostic failed',stage,exitStatus:e.status||null,detail:[stdout.slice(-500),stderr.slice(-500)].filter(Boolean).join(' ')||(e.message||'').slice(-1000)}));process.exit(1);}
 (async()=>{
   require('./hosted-system.cjs')();
   stage='npm installation';
