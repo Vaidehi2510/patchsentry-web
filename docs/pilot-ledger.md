@@ -68,3 +68,28 @@ The legacy Java PR-scoring API remains separate. Java receipts attest storage, n
 ## Remaining external validation
 
 A real company Entra/offboarding pilot, an AWS physical-device pilot and an independent assessor's review require authorized accounts, actual product artifacts and an assessor. These cannot be fabricated by software scaffolding. The website records those gaps and blocks selected enforcement requirements until reviewed evidence is supplied. The shared hosted capacity remains the documented limited pilot allowance, not an enterprise-scale managed fleet.
+
+## Routine-operation hardening
+
+See [acceptance and capability matrix](enterprise-readiness.md),
+[operator runbook](enterprise-operations.md) and
+[verification record](enterprise-verification.md) for the current supported
+scope. Inferred requirements can be retained as drafts and never enter an approved
+plan without explicit confirmation. Definition/test/usage/policy/bug corrections
+are new Ledger events. Completed server-enrolled jobs retain exact configuration
+context; older imported reports may lack it.
+
+Held-out pilot partitions, distinct defect IDs and paired human-work time logs
+now live inside **Pilot & Ledger**. UI case lines optionally accept a stable
+defect ID and scenario (`ui`, `api-data`, `permission`, `async`, `infrastructure`,
+`identity` or `other`) after the requirement field. Reuse a defect ID for browser
+repeats of the same known defect. Missing IDs are not guessed. Development and
+held-out executions remain separately visible. No authentic manual-workflow
+baseline has been measured by implementing the time-log feature.
+
+The owner can optionally require qualified held-out cases, exact Java archive
+acknowledgment and retained evidence. These are off by default; existing projects
+stay compatible. Pending archival never means delivered. **Retrieve release
+history** exports the current bounded page; follow earlier pages until complete.
+Review payload availability and download evidence separately under current
+project authorization. Expired bytes are never recreated from hash receipts.

@@ -608,3 +608,11 @@ test("scheduled operation health records success, failure and interrupted leases
   await trackedOperation(r, "maintenance", async () => ({ recovered: true }));
   assert.equal((await operationHealth(r)).tasks[0].state, "succeeded");
 });
+
+test('paginated release history retrieves every retained decision exactly once across page boundaries',async()=>{
+ const {appendLedger}=await import('../src/lib/server/assessment-ledger');const {releaseHistory}=await import('../src/lib/server/release-history');
+ const c=await r.database.connect();const expected=new Set<string>();try{await c.query('BEGIN');for(let i=0;i<12;i++){const entry=await appendLedger(r,c.query.bind(c),id,'release-decision','fixture-pagination:'+i,{fixture:true,index:i,releaseAuthorized:false},'Fixture CI',rid);expected.add(entry.id);}await c.query('COMMIT');}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
+ const seen=new Set<string>();let before:number|undefined,pages=0;do{const page=await releaseHistory(r,id,rid,before);for(const entry of page.events){assert.ok(!seen.has(entry.id),'History pages must not repeat entries.');seen.add(entry.id);}pages++;before=page.nextBefore||undefined;}while(before);
+ assert.ok(pages>=2);for(const entry of expected)assert.ok(seen.has(entry),'Every retained release decision must be retrievable.');
+ await assert.rejects(releaseHistory(r,other,rid),/No retained Ledger history/);
+});

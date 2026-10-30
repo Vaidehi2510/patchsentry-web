@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "verificationDate": "2026-10-30",
+  "scope": "controlled development verification; not independent enterprise assurance",
+  "baseline": {
+    "website": "4c6cae5b084fbd3536f026542269d5f7f602fba6",
+    "engine": "4b5fac3677e13ef466b5ecc3d9dd94cdf391b3a1",
+    "java": "6a15e90"
+  },
+  "implementation": {
+    "website": "bb9e790",
+    "engine": "d0ae18ab0311aff75d4b4c8394670c9a671f5a49"
+  },
+  "tests": {
+    "website": {
+      "passed": 165,
+      "failed": 0,
+      "skipped": 0
+    },
+    "engineWithRealBrowsers": {
+      "passed": 336,
+      "failed": 0,
+      "skipped": 2,
+      "skipReason": "separately enrolled Docker framework images unavailable"
+    },
+    "javaWithRealDatastores": {
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "websiteTypecheck": "passed",
+  "websiteProductionBuild": "passed",
+  "dependencyAudit": {
+    "websiteProductionAdvisories": 0,
+    "engineProductionAdvisories": 0
+  },
+  "browser": {
+    "syntheticAccount": true,
+    "detectedAxeViolations": 0,
+    "mobileOverflowWidthsTested": [
+      390,
+      320
+    ],
+    "pilotAndTimeLogFlows": "passed"
+  },
+  "controlledWorkflow": {
+    "scope": "Controlled application; real Chromium UI/API/data assertions with fixture GitHub/Java transports. Not a real customer qualification.",
+    "labelsRegisteredBeforeExecution": true,
+    "observations": [
+      {
+        "case": "healthy",
+        "expected": "passed",
+        "actual": "passed",
+        "recordId": "b1e3d815808e3626f90c0be583c599ce40a94d581139aab7cdb3c3ede02fa585",
+        "checks": 2,
+        "evidenceFiles": 2,
+        "historyPages": 1,
+        "historyEvents": 9,
+        "javaAcknowledged": true
+      },
+      {
+        "case": "wrong-amount",
+        "expected": "failed",
+        "actual": "failed",
+        "recordId": "1bfbddd1191195f7a71d00f71d920fa445e7034e042b052c076a50a3a7403253",
+        "checks": 2,
+        "evidenceFiles": 2,
+        "historyPages": 1,
+        "historyEvents": 9,
+        "javaAcknowledged": true
+      },
+      {
+        "case": "permission",
+        "expected": "failed",
+        "actual": "failed",
+        "recordId": "2e82fcefd8914976a45b248cbf1ca49370230ab6993baf1c81742300cac05b1c",
+        "checks": 2,
+        "evidenceFiles": 2,
+        "historyPages": 1,
+        "historyEvents": 9,
+        "javaAcknowledged": true
+      },
+      {
+        "case": "async",
+        "expected": "failed",
+        "actual": "failed",
+        "recordId": "be6e83c458fc07f42eb864d1d3242f006503e22917e2460280149077d5712988",
+        "checks": 2,
+        "evidenceFiles": 2,
+        "historyPages": 1,
+        "historyEvents": 9,
+        "javaAcknowledged": true
+      },
+      {
+        "case": "wrong-revision",
+        "expected": "blocked",
+        "actual": "blocked",
+        "recordId": "213e5141877cda599eea351ccb052f993bfb98f648bd99a37b70d01140c1005b",
+        "checks": 2,
+        "evidenceFiles": 0,
+        "historyPages": 1,
+        "historyEvents": 6,
+        "javaAcknowledged": true
+      },
+      {
+        "case": "worker-interrupted",
+        "expected": "blocked",
+        "actual": "blocked",
+        "infrastructure": true
+      }
+    ],
+    "matched": 6,
+    "distinctSeededProductDefects": 3,
+    "identityControls": 1,
+    "infrastructureFailures": 1,
+    "duplicateDeliveriesDeduplicated": true,
+    "crossProjectHistoryDenied": true,
+    "automaticDefectReports": 3,
+    "ledgerChainValid": true,
+    "frozenContexts": 5,
+    "modelCalls": 0,
+    "aiDiagnosisEvaluated": false,
+    "staffingImpact": "Not measured; no manual-workflow baseline.",
+    "runtimeMs": 6903
+  },
+  "realLocalJavaHttp": {
+    "archivedAssessments": 2,
+    "subjects": [
+      "pull_request",
+      "release"
+    ],
+    "receiptReconciliation": "passed",
+    "productionDeployed": false
+  },
+  "localPostgresRestore": {
+    "separateSourceAndRestoredDatabases": true,
+    "countsAndMembershipAndUsagePreserved": true,
+    "ledgerChainAndPayloadDecryption": "passed",
+    "evidenceAndBaselineAndCredentialDecryption": "passed",
+    "productionRtoOrRpoMeasured": false
+  },
+  "unverified": [
+    "real company Entra tenant lifecycle",
+    "real AWS physical-device pilot",
+    "real customer held-out defect recall",
+    "AI diagnosis quality",
+    "authentic manual workload comparison and staffing impact",
+    "cloud enterprise quotas and billing",
+    "production backup restore and operational ownership",
+    "independent security assessment"
+  ],
+  "readinessDecision": "controlled advisory pilot; no general enterprise QA replacement claim"
+}

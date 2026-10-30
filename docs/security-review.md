@@ -22,3 +22,18 @@ Use authorized staging tenants, disposable devices and synthetic data. Validate 
 Evaluate accessibility with assistive technology and usability with representative users; automated checks alone do not establish the quality of every user experience. Evaluate requirements, business rules, performance/security testing and defect recall against a labeled real-product pilot.
 
 The account owner must select and authorize an independent assessor and arrange access. The implementation author cannot supply independence by reviewing their own code.
+
+## 2026-10-30 hardening additions for assessor review
+
+The scope now includes hosted per-connection DNS pinning (HTTP/CONNECT/API
+oracles), stable directory identity bindings and effective manual offboarding,
+server-recomputed frozen execution coverage, version-bound retained evidence,
+archive destination/claim/receipt binding and reconciliation, execution recovery,
+retry budget reservations and paginated release-history exports. Review both
+`test/enterprise-hardening.test.ts` and engine `test/network.test.js`, plus the
+controlled real-browser workflow and isolated PostgreSQL recovery harness.
+
+Local dependency audits reported no production advisories at this verification;
+that is neither a penetration test nor independent assurance. No real company
+Entra tenant, physical-device account, customer backup or assessor was supplied.
+The implementation author's tests cannot close those external evidence items.
