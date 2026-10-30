@@ -53,7 +53,7 @@ export default function DocsPage() {
             <p>
               <strong>Patchsentry’s web workspace</strong> is where you organize
               review activity and inspect shared reports.{" "}
-              <strong>Hosted QA workers</strong> run browser checks and AI reviews for public repositories and disposable web previews. A self-hosted connector is optional for private networks, native devices or local models.
+              <strong>Hosted QA workers</strong> run browser checks and AI reviews for public or connected private repositories and disposable web previews. A self-hosted connector is optional for private networks, native devices or local models.
             </p>
             <div className="docs-diagram">
               <div>
@@ -84,8 +84,8 @@ export default function DocsPage() {
           <section id="engine">
             <span className="eyebrow">02 / YOUR FIRST HOSTED RUN</span>
             <h2>Configure QA on the website.</h2>
-            <ol><li>Create a project for an authorized public GitHub repository.</li><li>Open Models &amp; agents, paste your OpenRouter key, and verify it. Select and save your models and spending cap.</li><li>In Testing setup, save a public HTTPS preview, synthetic inputs and explicit expected outcomes. Add product requirements for build/release gates.</li><li>Request QA for a full source SHA and PR, build or version. Patchsentry starts a bounded isolated worker and delivers results to the dashboard.</li></ol>
-            <p>No local installation or runner token is needed for hosted web QA. The preview must expose <code>x-qa-revision</code> tied to its actual deployed commit. Build/release previews also expose <code>x-qa-artifact-sha256</code> and require a direct immutable artifact URL (up to 64 MiB).</p><p>The shared hosted pilot permits two concurrent jobs and eight starts per month, with a 15-minute worker lifetime. Model charges use your OpenRouter credits. Private repositories, authored unit-test execution and native/device suites currently use the optional advanced runner.</p>
+            <ol><li>Create a project for an authorized GitHub repository. Private repositories connect a read-only GitHub token in Integrations.</li><li>Open Models &amp; agents, paste your OpenRouter key, and verify it. Select and save your models and spending cap.</li><li>In Testing setup, save a public HTTPS preview, synthetic inputs and explicit expected outcomes. Add product requirements for build/release gates.</li><li>Request QA for a full source SHA and PR, build or version. Patchsentry starts a bounded isolated worker and delivers results to the dashboard.</li></ol>
+            <p>No local installation or runner token is needed for hosted web QA. The preview must expose <code>x-qa-revision</code> tied to its actual deployed commit. Build/release previews also expose <code>x-qa-artifact-sha256</code> and require a direct immutable artifact URL (up to 64 MiB).</p><p>The shared hosted pilot permits two concurrent jobs and eight starts per month, with a 15-minute worker lifetime. Model charges use your OpenRouter credits. Private repositories can connect read access in Integrations. Private-network previews, authored unit-test execution and native/device suites use the optional advanced runner.</p>
             <a
               className="text-link"
               href={`${engine}/blob/main/README.md`}

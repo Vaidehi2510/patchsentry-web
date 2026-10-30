@@ -3,7 +3,7 @@ const fs=require('node:fs');
 const root='/vercel/sandbox';
 let stage='network isolation';
 function fail(e){console.log(JSON.stringify({error:'Hosted diagnostic failed',stage,exitStatus:e.status||null,detail:String(e.stderr||e.message||'').slice(0,1000)}));process.exit(1);}
-try{if(fs.existsSync('/proc/sys/net/ipv6/conf/all/disable_ipv6'))execFileSync('sudo',['sysctl','-w','net.ipv6.conf.all.disable_ipv6=1','net.ipv6.conf.default.disable_ipv6=1'],{stdio:'pipe',timeout:10000});}catch(e){fail(e);}
+try{require('./hosted-system.cjs')();}catch(e){fail(e);}
 stage='npm installation';
 fs.writeFileSync(root+'/package.json',JSON.stringify({private:true,dependencies:{'playwright-core':'1.63.0'}}));
 try{execFileSync('npm',['install','--ignore-scripts','--no-audit','--no-fund'],{cwd:root,stdio:'pipe',timeout:60000});}catch(e){fail(e);}

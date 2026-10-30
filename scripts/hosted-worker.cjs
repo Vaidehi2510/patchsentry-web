@@ -17,7 +17,7 @@ async function main(){
   const {hostedArtifactUrl,...job}=input.job;
   if(!/^[\w.-]+\/[\w.-]+$/.test(job.repository)||!/^\w[\w./-]{0,119}$/.test(job.base)||job.base.includes('..')||!/^[a-f0-9]{40}$/.test(job.revision)||!/^[a-f0-9]{40}$/.test(input.engineRevision))throw new Error('Invalid immutable inputs');
   stage='enforcing hosted network isolation';
-  if(require('node:fs').existsSync('/proc/sys/net/ipv6/conf/all/disable_ipv6'))await command('sudo',['sysctl','-w','net.ipv6.conf.all.disable_ipv6=1','net.ipv6.conf.default.disable_ipv6=1']);
+  require('./hosted-system.cjs')();
   stage='preparing the QA engine';
   await command('git',['-c','core.hooksPath=/dev/null','clone','--no-checkout','--filter=blob:none','https://github.com/Vaidehi2510/QA-testbot.git',root+'/engine']);
   await command('git',['-c','core.hooksPath=/dev/null','checkout','--detach',input.engineRevision],root+'/engine');
