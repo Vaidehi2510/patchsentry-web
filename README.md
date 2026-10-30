@@ -12,7 +12,7 @@ The website is the control and reporting interface. The separate QA engine execu
 - A clearly labeled interactive demo; demo metrics never appear as real customer results.
 - Email-first signup followed by mandatory password and two-factor enrollment; password plus second factor on every new login. Secure cookies, server-side session assurance and database-backed rate limits.
 - Account-scoped projects, reports, model settings, and one-time runner enrollment tokens.
-- A live OpenRouter catalog with context sizes, tool/vision capabilities, and pricing. Guided owner/admin key verification, encrypted runner delivery, local server discovery and explicit bounded model connection checks are available in Models & agents. See [connection setup](docs/agent.md#guided-model-connections).
+- A live OpenRouter catalog with context sizes, tool/vision capabilities, and pricing. Direct encrypted hosted key setup, optional encrypted private-runner delivery, local server discovery and explicit bounded model connection checks are available in Models & agents. See [connection setup](docs/agent.md#guided-model-connections).
 - Local model inventories reported by an outbound connector; the website never contacts users’ localhost servers.
 - A default model or separate model for each of five QA roles, with per-run budget and call limits.
 - Revision- and artifact-specific QA reports, transparent required-check scores, and unverified AI findings.
@@ -40,7 +40,17 @@ npm run dev
 
 Visit `http://127.0.0.1:3000`. PGlite persists accounts and projects under the configured directory. It is development-only; production requires PostgreSQL and HTTPS.
 
-## Connect a product
+## Connect a product on the website
+
+1. Create a project for an authorized GitHub repository.
+2. In **Models & agents**, paste and verify your OpenRouter key, select a compatible model, and save your choices. The key field works without a runner.
+3. For a private repository, open **Integrations** and verify a fine-grained GitHub token limited to that repository, with Contents: read-only and Metadata: read-only. Public repositories need no token.
+4. Save a public HTTPS disposable preview and explicit goal assertions in **Testing setup**. The preview must expose its deployed source SHA in `x-qa-revision`.
+5. Request QA for a full source SHA and PR, web build or release. Builds/releases also need a direct artifact download, SHA-256 and deployed artifact identity header. Patchsentry manages the worker and returns reports to the dashboard.
+
+No connector command or always-on customer machine is needed for hosted web QA. See [hosted scope and pilot limits](docs/hosted.md).
+
+## Optional private-network and self-hosted connector
 
 1. Create an account and project using the product’s `owner/repository` name.
 2. Set up a separate trusted [QA-testbot](https://github.com/Vaidehi2510/QA-testbot) checkout and configure its GitHub access, PR scope, preview environment, and test runners. Use a separate bot configuration per product.

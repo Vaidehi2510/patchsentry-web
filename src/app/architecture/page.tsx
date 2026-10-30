@@ -32,8 +32,7 @@ export default function Architecture() {
                 <code>patchsentry-web/scripts/agent.mjs</code> runs on that same
                 trusted machine. It polls the website for jobs, invokes the QA
                 engine under a locally reviewed policy, and uploads bounded
-                result summaries. The engine reads the product code; the website
-                does not clone your product.
+                result summaries. Hosted mode uses managed workers that fetch committed Git objects in isolated storage. The website server does not execute product code.
               </li>
               <li>
                 Read the outcome in this dashboard. Optional Slack updates and
