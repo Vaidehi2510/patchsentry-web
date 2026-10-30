@@ -124,6 +124,7 @@ test('AWS Device Farm is opt-in, bounded, project scoped, deduplicated and repor
  assert.equal((await api(root+'/runs','POST',{...request,appArn:appArn.replace('123456789012','999999999999')})).status,403);
  const started=await api(root+'/runs','POST',request);assert.equal(started.status,200,await started.clone().text());const id=(await started.json()).id;
  assert.equal((await api(root+'/runs','POST',request)).status,200);assert.equal(schedules,1);
+ assert.equal((await api(root+'/runs','POST',{...request,revision:'c'.repeat(40)})).status,409,'idempotency cannot silently reuse a different build');
  const result=await(await api(root+'/runs/'+id,'POST',{})).json();assert.equal(result.result.status,'blocked');assert.equal(result.result.failed,1);assert.equal(result.result.devices.length,1);assert.ok(result.result.limitations.some((v:string)=>v.includes('not independently hashed')));
  passed=true;const green=await(await api(root+'/runs/'+id,'POST',{})).json();assert.equal(green.result.status,'passed');assert.equal(green.result.tests,2);assert.equal(green.result.limitations.length,3);
  assert.equal((await api(root+'/runs','POST',{...request,idempotencyKey:randomUUID()})).status,409);assert.equal(schedules,1);
