@@ -6,7 +6,7 @@ Keys are encrypted using AES-256-GCM with a project-specific key derived from th
 
 ## Requesting work
 
-1. Connect an authorized public GitHub repository. Repository registration is not proof of ownership. An owner can enable repository authorization requirements in Product QA policy.
+1. Connect an authorized public or private GitHub repository. For private source, open Integrations and connect a fine-grained token limited to this exact repository, with Contents: read-only and Metadata: read-only. The token is verified and stored encrypted, separately from your OpenRouter key. Repository registration is not proof of ownership. An owner can enable repository authorization requirements in Product QA policy.
 2. Save a public HTTPS disposable preview, the base branch, browser engines, synthetic inputs and trusted goal assertions in Testing setup. The actual deployed preview must report `x-qa-revision` matching the requested full commit SHA. Redirects and destinations outside the preview policy are blocked.
 3. For a web build/release, also supply a direct immutable artifact URL (up to 64 MiB), version/build ID and SHA-256. The worker downloads and hashes those bytes without extracting or executing them. The preview must report `x-qa-artifact-sha256` matching the deployed artifact. Map high/critical product requirements before release QA.
 4. Request QA. A frozen job records its expectations, source revision and model limits. A managed Vercel Sandbox starts the pinned engine in a nonpersistent VM. Its network allowlist denies private, loopback, metadata and reserved networks.
