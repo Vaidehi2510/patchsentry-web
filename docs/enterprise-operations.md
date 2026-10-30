@@ -74,3 +74,8 @@ Standalone imported reports remain readable and their original check scores are
 preserved, but cannot alone authorize a release. Report details explicitly show
 missing execution scope. This closes an omission bypass rather than trusting a
 worker-supplied percentage.
+
+The two `scripts/enterprise-*-fixture.ts` development harnesses depend on test
+helpers and are excluded from the Vercel source package alongside `/test` and
+local artifacts. They remain in Git and in CI/local type checks. Production
+migration/build scripts and all application type checks remain included.

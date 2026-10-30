@@ -50,3 +50,11 @@ and production backup/restore ownership. No additional paid capacity, credential
 external notifications or customer-data testing was used to invent completion.
 
 Implementation commit: `bb9e790`. Engine GitHub verification passed. Final release evidence and operator documents are committed separately.
+
+First production packaging attempt stopped at type checking because local fixture
+harnesses imported `/test/auth-session`, while `/test` is intentionally excluded
+from Vercel. The application migration succeeded but the old deployment remained
+live. The packaging correction excludes only the two development fixture scripts;
+CI still type-checks them and application type checking remains enforced. Retry
+the existing deployment with the corrected source package; no customer data rollback
+or destructive migration is needed.
