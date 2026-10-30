@@ -1,8 +1,11 @@
+import {automationView,saveAutomation,rotateAutomationSecret,receiveAutomation,dispatchAutomation,automationMaintenance,automationResult} from './automation';
+import {weeklyReports,generateWeeklyReport,deliverWeekly,scheduledWeekly} from './weekly';
+import {cloudSlackStatus,connectCloudSlack,deliverCloudNotifications} from './slack-cloud';
 import {repositoryConnection,connectRepository,disconnectRepository} from './repository-connection';
 import {after} from 'next/server';
 import {startHosted,stopHosted,completeHosted,verifyHostedInfrastructure} from './hosted';
 import {providerStatus,connectProvider,removeProvider,probeProvider} from './provider-vault';
-import {maintenance} from './maintenance';
+import {maintenance,operatorAuthentication} from './maintenance';
 import {planSnapshot,qualityView,saveRequirement,saveBrief,saveBug,updateBug,metrics,saveUsage,policyFor,requirementCoverage} from './quality';
 import {uploadEvidence,evidenceList,downloadEvidence} from './evidence';
 import {verifyRepository,repositoryProof} from './repository-authorization';
@@ -306,9 +309,11 @@ async function dispatch(
       503,
       "Account storage is not configured. Set the database and authentication environment variables.",
     );
+  const eventEndpoint=/^\/api\/automation\/([a-f0-9-]{36})\/(github|ci|result)$/.exec(path);
+  if(eventEndpoint&&request.method==='POST'){if(eventEndpoint[2]==='result')return json(await automationResult(runtime,eventEndpoint[1],request));const result=await receiveAutomation(runtime,eventEndpoint[1],eventEndpoint[2] as 'github'|'ci',request);(runtime.defer||after)(async()=>{await dispatchAutomation(runtime,eventEndpoint[1]);await deliverCloudNotifications(runtime,eventEndpoint[1]);});return json(result,202);}
   const hostedResult=/^\/api\/internal\/hosted\/([a-f0-9-]{36})(?:\/(stop|evidence)(?:\/([a-f0-9-]{36}))?)?$/.exec(path);
   if(hostedResult&&request.method==='POST'){
-    if(!hostedResult[2])return json(await completeHosted(runtime,hostedResult[1],request,sanitize(await readBody(request))));
+    if(!hostedResult[2]){const result=await completeHosted(runtime,hostedResult[1],request,sanitize(await readBody(request)));const p=(await runtime.database.query<{project_id:string}>('SELECT project_id FROM qa_jobs WHERE id=$1',[hostedResult[1]])).rows[0];if(p)(runtime.defer||after)(()=>deliverCloudNotifications(runtime,p.project_id));return json(result);}
     const capability=request.headers.get('authorization')?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1];
     const row=capability?(await runtime.database.query<{project_id:string;record_id:string;status:string}>("SELECT project_id,record_id,status FROM qa_jobs WHERE id=$1 AND callback_hash=$2 AND hosted_expires_at>now() AND execution_mode='hosted'",[hostedResult[1],createHash('sha256').update(capability).digest('hex')])).rows[0]:null;
     if(!row)throw new ApiError(403,'Invalid or expired job capability.');
@@ -317,7 +322,8 @@ async function dispatch(
     throw new ApiError(409,'This hosted job cannot accept that action.');
   }
   if(path==='/api/internal/hosted-check'&&request.method==='POST')return json(await verifyHostedInfrastructure(request,runtime));
-  if(path==='/api/internal/maintenance' &&request.method==='GET')return json(await maintenance(request,runtime));
+  if(path==='/api/internal/weekly'&&request.method==='GET'){operatorAuthentication(request,runtime);(runtime.defer||after)(async()=>{await scheduledWeekly(runtime);const rows=(await runtime.database.query<{project_id:string}>("SELECT DISTINCT project_id FROM qa_notifications WHERE status='pending' ORDER BY project_id LIMIT 20")).rows;for(const row of rows)await deliverCloudNotifications(runtime,row.project_id);});return json({accepted:true});}
+  if(path==='/api/internal/maintenance' &&request.method==='GET'){const result=await maintenance(request,runtime);(runtime.defer||after)(()=>automationMaintenance(runtime));return json(result);}
   if(path.startsWith('/api/account')){if(request.method!=='GET')requireOrigin(request,runtime.config.origin);return accountEndpoint(request,runtime,request.method==='GET'?undefined:await readBody(request));}
   if(path.startsWith('/api/security/')){if(request.method!=='GET')requireOrigin(request,runtime.config.origin);return securityEndpoint(request,runtime,request.method==='POST'?await readBody(request):undefined);}
   if (path.startsWith("/api/auth/")) {
@@ -439,6 +445,13 @@ async function dispatch(
   if (request.method !== "GET") requireOrigin(request, runtime.config.origin);
   const user = await userFor(request, runtime);
 
+  const automated=/^\/api\/projects\/([a-f0-9-]{36})\/(automation|weekly-reports|cloud-slack)(?:\/(secret|generate|disconnect))?$/.exec(path);
+  if(automated){const p=await accessibleProject(runtime,automated[1],user.id,request.method==='GET'?'viewer':automated[3]==='secret'?'owner':'admin');const area=automated[2],action=automated[3];
+   if(area==='automation'){if(request.method==='GET')return json(await automationView(runtime,p.id));if(request.method==='PATCH')return json(await saveAutomation(runtime,p,await readBody(request),user.name));if(request.method==='POST'&&action==='secret')return json(await rotateAutomationSecret(runtime,p.id,user.name));}
+   if(area==='weekly-reports'){if(request.method==='GET')return json(await weeklyReports(runtime,p.id));if(request.method==='POST'&&action==='generate'){const report=await generateWeeklyReport(runtime,p.id);return json({report});}}
+   if(area==='cloud-slack'){if(request.method==='GET')return json(await cloudSlackStatus(runtime,p.id));if(request.method==='POST')return json(await connectCloudSlack(runtime,p.id,await readBody(request),user.name));if(request.method==='DELETE'){await runtime.database.query("DELETE FROM qa_provider_credentials WHERE project_id=$1 AND provider='slack'",[p.id]);return json({removed:true});}}
+   throw new ApiError(405,'Method not allowed.');
+  }
   const repositorySetup=/^\/api\/projects\/([a-f0-9-]{36})\/repository-connection$/.exec(path);
   if(repositorySetup){const p=await accessibleProject(runtime,repositorySetup[1],user.id,request.method==='GET'?'viewer':'admin');if(request.method==='GET')return json(await repositoryConnection(runtime,p.id));if(request.method==='POST')return json(await connectRepository(runtime,p.id,p.repository,await readBody(request),user.name));if(request.method==='DELETE')return json(await disconnectRepository(runtime,p.id,user.name));throw new ApiError(405,'Method not allowed.');}
   const provider=/^\/api\/projects\/([a-f0-9-]{36})\/provider\/openrouter(?:\/(probe))?$/.exec(path);

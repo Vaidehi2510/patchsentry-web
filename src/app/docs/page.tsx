@@ -31,7 +31,7 @@ export default function DocsPage() {
           <span>ON THIS PAGE</span>
           <a href="#architecture">How the pieces fit</a>
           <a href="#engine">Run the QA engine</a>
-          <a href="#models">Choose a model backend</a>
+          <a href="#automation">Automatic QA &amp; weekly reports</a><a href="#models">Choose a model backend</a>
           <a href="#review">Review a specific change</a>
           <a href="#browser">Add browser coverage</a>
           <a href="#workspace">Connect a workspace</a>
@@ -95,6 +95,7 @@ export default function DocsPage() {
               Read the complete engine setup <ArrowUpRight size={14} />
             </a>
           </section>
+          <section id="automation"><span className="eyebrow">CONTINUOUS QA</span><h2>Configure once. Test each eligible change.</h2><p>Automation &amp; reports connects signed GitHub and CI events, verifies repository administrator authority and exact source/build identity, and automatically requests bounded QA. Select branch, label, PR and build/version exceptions. Duplicated events reuse their assessment; unstarted work can recover when prerequisites return. Paid interrupted work is never silently restarted.</p><p>Weekly reports show received assessments, executed checks, omitted and blocked work, unresolved risks, retained evidence and known/unknown costs. Save them in the dashboard, optionally email the verified owner, or connect encrypted Slack delivery from the website. CI can wait for the signed result and block deployment when evidence is missing.</p><p>SSO/SCIM, managed physical-device fleets, persistent hosted visual baseline management and independent security assessment remain outside this release. The current hosted pilot capacity limits still apply.</p><a className="text-link" href="https://github.com/Vaidehi2510/patchsentry-web/blob/main/docs/automation.md">Read the automatic QA setup guide <ArrowUpRight size={14}/></a></section>
           <section id="models">
             <span className="eyebrow">03 / MODEL CONNECTION</span>
             <h2>Hosted or local. Your choice.</h2>

@@ -1,4 +1,5 @@
 "use client";
+import {AutomationPanel} from './automation-panel';
 import {HostedRepositorySetup} from './hosted-repository-setup';
 import {QualityHub,EvidencePanel} from "./quality-hub";
 import {AccountSettings} from "./account-settings";
@@ -49,10 +50,11 @@ import "./workspace.css";
 import { MotionToggle } from "./motion";
 import { runnerOnline } from "@/lib/jobs";
 
-type Tab = "overview" | "runs" | "models" | "testing" | "integration" | "tests" | "team" | "account" | "quality";
+type Tab = "overview" | "runs" | "models" | "testing" | "integration" | "tests" | "team" | "account" | "quality" | "automation";
 type User = { id: string; name: string; email: string };
 const nav = [
   { id: "overview" as Tab, label: "Overview", icon: LayoutDashboard },
+  { id: "automation" as Tab, label: "Automation & reports", icon: Clock3 },
   { id: "quality" as Tab, label: "Product QA", icon: ClipboardCheck },
   { id: "runs" as Tab, label: "QA reports", icon: GitPullRequest },
   { id: "tests" as Tab, label: "Test library", icon: Code2 },
@@ -399,7 +401,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   <h1 id="workspace-title" tabIndex={-1}>
                     {selected
                       ? subjectLabel(selected)
-                      : tab === "account" ? "Your account. Your control." : tab === "overview"
+                      : tab === "automation" ? "QA that keeps up with your product." : tab === "account" ? "Your account. Your control." : tab === "overview"
                         ? "Ship with your eyes open."
                         : tab === "runs"
                           ? "Every change. Every finding."
@@ -410,7 +412,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   <p>
                     {selected
                       ? subjectTitle(selected)
-                      : tab === "account" ? "Manage your profile, sign-in security, devices and workspaces." : tab === "overview"
+                      : tab === "automation" ? "Automatic triggers, explicit exceptions, weekly evidence and optional team updates." : tab === "account" ? "Manage your profile, sign-in security, devices and workspaces." : tab === "overview"
                         ? "A clear view of what’s ready, what’s risky, and what needs you."
                         : tab === "runs"
                           ? "Trace each result to the exact revision that was tested."
@@ -480,6 +482,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   {tab === "quality" && <QualityHub project={project} runs={runs} demo={demo} navigate={go}/>}
                   {tab === "team" && <TeamOperations key={project.id} project={project} demo={demo} />}
                   {!demo && tab === "overview" && <><section className="notice"><div><strong>Build a durable QA plan for this product.</strong><p>Connect the repository, define requirements, inspect bugs and measure outcomes in one guided workflow.</p><button className="text-button" onClick={()=>go("quality")}>Open Product QA setup →</button></div></section><ProjectSetup project={project} navigate={go} /></>}
+                  {tab === 'automation' && <AutomationPanel key={project.id} project={project} demo={demo} navigate={go}/>}
                   {tab === "testing" && <fieldset className="access-controls" disabled={roleRank[project.accessRole || "owner"] < 2}><TestingSetup key={project.id} project={project} demo={demo} onSaved={value => setProjects(items => items.map(p => p.id === value.id ? value : p))} /></fieldset>}
                   {tab === "overview" && (
                     <>

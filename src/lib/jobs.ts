@@ -16,17 +16,22 @@ export const PreviewTemplateSchema = z.string().max(500).refine(value => {
   try { const url = new URL(expanded); return !/[{}\s\\]/.test(expanded) && ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.hash && !url.search; } catch { return false; }
 }, "Use an HTTP(S) preview URL, optionally containing {pr} or {sha}, without credentials or query parameters.");
 export const AssertionSchema = z.object({
-  id: identifier, action: z.enum(["expectText", "expectVisible", "expectUrl","expectHidden","expectCount"]),
+  id: identifier, action: z.enum(["expectText", "expectVisible", "expectUrl","expectHidden","expectCount","expectFocused","expectApi"]),
   selector: safeText(240).optional(), role: z.string().regex(/^[a-z]+$/).max(40).optional(), name: safeText(160).optional(),
+  status:z.number().int().min(100).max(599).optional(),jsonPointer:z.string().max(300).regex(/^(?:\/(?:[^~]|~[01])*)?$/).optional(),expectedValue:z.union([z.string().max(500),z.number().finite(),z.boolean(),z.null()]).optional(),
   count:z.number().int().min(0).max(10000).optional(),text: safeText(500).optional(), path: relativePath.optional(), exact: z.boolean().optional(),
 }).strict().superRefine((a, ctx) => {
+  if(a.action==='expectApi'){
+    if(!a.path||a.status===undefined||['selector','role','name','text','exact','count'].some(k=>(a as any)[k]!==undefined)||(a.jsonPointer!==undefined)!==(a.expectedValue!==undefined))ctx.addIssue({code:'custom',message:'API assertions need a same-origin path, status and optional JSON pointer plus scalar expected value.'});return;
+  }
+  if(['status','jsonPointer','expectedValue'].some(k=>(a as any)[k]!==undefined))ctx.addIssue({code:'custom',message:'Response expectations belong only to API assertions.'});
   if (a.action === "expectUrl" ? !a.path : !(a.selector || a.role && a.name)) ctx.addIssue({ code: "custom", message: "Each assertion needs an explicit URL path or element selector/role and name." });
   if(a.action==="expectCount"&&a.count===undefined||a.action!=="expectCount"&&a.count!==undefined)ctx.addIssue({code:"custom",message:"Only count assertions require an expected count."});
   if (a.action === "expectText" && !a.text) ctx.addIssue({ code: "custom", message: "Expected text is required." });
   if (a.exact !== undefined && a.action !== "expectText") ctx.addIssue({ code: "custom", message: "Exact matching applies only to text assertions." });
   if (a.selector !== undefined && (!a.selector || /^(?:javascript|internal):/i.test(a.selector))) ctx.addIssue({ code: "custom", message: "Use an explicit CSS or supported accessibility locator." });
   if (a.role !== undefined && !a.name) ctx.addIssue({ code: "custom", message: "A role locator requires its accessible name." });
-  if (a.action === "expectUrl" && [a.selector, a.role, a.name, a.text].some(v => v !== undefined) || a.action !== "expectUrl" && a.path !== undefined || ["expectVisible","expectHidden","expectCount"].includes(a.action) && a.text !== undefined) ctx.addIssue({ code: "custom", message: "The assertion contains fields for a different action." });
+  if (a.action === "expectUrl" && [a.selector, a.role, a.name, a.text].some(v => v !== undefined) || a.action !== "expectUrl" && a.path !== undefined || ["expectVisible","expectHidden","expectCount","expectFocused","expectApi"].includes(a.action) && a.text !== undefined) ctx.addIssue({ code: "custom", message: "The assertion contains fields for a different action." });
 });
 export const GoalSchema = z.object({
   id: identifier, name: safeText(120).min(1), start: relativePath, requirement: safeText(1000).min(1),
@@ -55,6 +60,7 @@ export const RunnerSchema = z.object({
   platforms: z.array(z.enum(["web", "api", "android", "ios", "macos", "windows", "linux"])).max(7).optional(),
   workspaceTests: z.boolean().optional(),
   qualityPlans:z.boolean().optional(),
+  apiAssertions:z.boolean().optional(),
   baselineSuites: z.number().int().min(0).max(60).optional(),
   modelSetup:z.object({publicKey:z.string().min(100).max(2000),backends:z.array(z.enum(['openrouter','local'])).min(1).max(2)}).strict().optional(),
 }).strict().refine(v => !v.ready || v.executeJobs && v.missing.length === 0, "A ready runner must be enrolled and have no missing prerequisites.");

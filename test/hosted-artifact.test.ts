@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {createHash} from 'node:crypto';
+import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+const {downloadHostedArtifact}=createRequire(import.meta.url)('../scripts/hosted-artifact.cjs');
+test('private release downloads keep GitHub authorization on its exact API endpoint and drop it on the verified CDN redirect',async()=>{const dir=await mkdtemp(join(tmpdir(),'qa-artifact-')),bytes=Buffer.from('immutable build'),expectedSha=createHash('sha256').update(bytes).digest('hex'),token='github_pat_fixture_only',calls:any[]=[];try{await downloadHostedArtifact({url:'https://api.github.com/repos/owner/product/releases/assets/42',expectedSha,repository:'owner/product',gitHubToken:token,output:join(dir,'build'),fetchImpl:async(url:string,options:any)=>{calls.push({url,options});return calls.length===1?new Response('',{status:302,headers:{location:'https://release-assets.githubusercontent.com/asset?signature=fixture'}}):new Response(bytes);}});assert.equal(calls[0].options.headers.authorization,'Bearer '+token);assert.equal(calls[1].options.headers.authorization,undefined);assert.equal((await readFile(join(dir,'build'))).toString(),'immutable build');}finally{await rm(dir,{recursive:true,force:true});}});
+test('unapproved redirects, credentials in URLs and incorrect artifact bytes are rejected',async()=>{const dir=await mkdtemp(join(tmpdir(),'qa-artifact-'));try{const base={url:'https://builds.example/file.zip',expectedSha:'a'.repeat(64),repository:'owner/product',output:join(dir,'build')};await assert.rejects(()=>downloadHostedArtifact({...base,fetchImpl:async()=>new Response('',{status:302,headers:{location:'https://169.254.169.254/metadata'}})}));await assert.rejects(()=>downloadHostedArtifact({...base,fetchImpl:async()=>new Response('different bytes')}));await assert.rejects(()=>downloadHostedArtifact({...base,url:'https://user:key@builds.example/file.zip'}));}finally{await rm(dir,{recursive:true,force:true});}});

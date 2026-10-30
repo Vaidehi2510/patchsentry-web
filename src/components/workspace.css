@@ -2537,3 +2537,9 @@ html[data-motion=on] .auth-story:before { animation: ambient-drift 14s ease-in-o
 .hosted-model h2{display:flex;align-items:center;gap:10px}.hosted-model form{display:grid;gap:16px;max-width:720px}.hosted-inference{display:grid;gap:14px;border-top:1px solid #deddd4;margin-top:24px;padding-top:20px}.hosted-inference p{margin:0}.hosted-model .panel-heading{gap:20px;align-items:flex-start}
 
 @media(max-width:600px){.hosted-model .panel-heading{flex-direction:column;align-items:flex-start}.hosted-model .panel-heading>div{width:100%}.hosted-model h2{flex-wrap:nowrap}.hosted-model h2 svg{flex-shrink:0}}
+
+.weekly-report{margin-top:20px;border:1px solid var(--line,#deddd4);border-radius:12px;padding:18px}.weekly-report summary{cursor:pointer;font-weight:650;line-height:1.6}.weekly-report li{margin-block:8px;overflow-wrap:anywhere}.quality-hub .code-block{white-space:pre-wrap;overflow-wrap:anywhere}.quality-hub .operations-list small{overflow-wrap:anywhere}
+
+.quality-hub .code-block code{white-space:inherit;overflow-wrap:anywhere;word-break:break-word}
+@media(max-width:760px){.workspace .app-topbar>div:first-child{min-width:0;flex:1}.workspace .app-topbar strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.workspace .app-topbar>div:last-child{flex-shrink:0}}
+@media(max-width:380px){.workspace .app-topbar .topbar-muted{display:none}}

@@ -26,4 +26,4 @@ The website's Vercel runtime authenticates Sandbox operations with its platform 
 
 `CRON_SECRET` protects daily retention cleanup and the operator-only `POST /api/internal/hosted-check` diagnostic. That diagnostic starts one bounded, nonpersistent sandbox and runs actual Chromium, Firefox and WebKit assertions. It sends no product source and makes no model call. It is limited to ten requests per day, and its sandbox is stopped in a `finally` block. Do not expose the operator secret in browser code or logs.
 
-The scheduled GitHub QA controller remains disabled; hosted work starts only in response to an authorized website request. No GitHub schedule or workflow-dispatch permission is required.
+The scheduled GitHub QA controller remains disabled. Hosted work starts from an authorized manual request or an explicitly enabled signed GitHub/CI event policy. Daily reconciliation can recover missed PR events. No GitHub controller schedule or workflow-dispatch permission is required. See [automatic QA and weekly reports](automation.md).

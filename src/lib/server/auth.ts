@@ -1,7 +1,7 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
 import { magicLink, twoFactor } from "better-auth/plugins";
-import { gmailSender, gmailSecuritySender, gmailInvitationSender, type SendSignInLink, type SendSecurityCode, type SendInvitation } from "./email";
+import { gmailSender, gmailSecuritySender, gmailInvitationSender, gmailWeeklyReportSender, type SendWeeklyReport, type SendSignInLink, type SendSecurityCode, type SendInvitation } from "./email";
 import { sendFactorCode } from './factor-delivery';
 import type { Database } from "./database";
 
@@ -13,6 +13,7 @@ export interface AuthConfig {
   sendSecurityCode?: SendSecurityCode;
   sendInvitation?: SendInvitation;
   cronSecret?: string;
+  sendWeeklyReport?: SendWeeklyReport;
 }
 
 export function authConfig(
@@ -41,7 +42,7 @@ export function authConfig(
     throw new Error("BETTER_AUTH_URL must be an exact site origin");
   if (production && (url.protocol !== "https:" || !env.DATABASE_URL))
     throw new Error("Production requires HTTPS and DATABASE_URL");
-  return { secret: env.BETTER_AUTH_SECRET, origin: url.origin, production, sendSignInLink: gmailSender(url.origin, env), sendSecurityCode:gmailSecuritySender(env), sendInvitation:gmailInvitationSender(url.origin,env),cronSecret:env.CRON_SECRET };
+  return { secret: env.BETTER_AUTH_SECRET, origin: url.origin, production, sendSignInLink: gmailSender(url.origin, env), sendSecurityCode:gmailSecuritySender(env), sendInvitation:gmailInvitationSender(url.origin,env),sendWeeklyReport:gmailWeeklyReportSender(url.origin,env),cronSecret:env.CRON_SECRET };
 }
 
 export function authOptions(
@@ -184,5 +185,12 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
  await database.query("CREATE SEQUENCE IF NOT EXISTS qa_provider_generation START 100000");
  await database.query("CREATE TABLE IF NOT EXISTS qa_provider_credentials (project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,provider text NOT NULL,encrypted bytea NOT NULL,suffix text NOT NULL,version integer NOT NULL DEFAULT 1,verified_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(project_id,provider))");
  await database.query("CREATE TABLE IF NOT EXISTS qa_provider_probes (project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,id text NOT NULL,model text NOT NULL,credential_version integer NOT NULL,status text NOT NULL,message text NOT NULL DEFAULT 'Check in progress.',created_at timestamptz NOT NULL DEFAULT now(),completed_at timestamptz,PRIMARY KEY(project_id,id))");
+
+ await database.query("CREATE TABLE IF NOT EXISTS qa_automation_settings(project_id text PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,payload jsonb NOT NULL,reconcile_page integer NOT NULL DEFAULT 1,lease_until timestamptz,updated_at timestamptz NOT NULL DEFAULT now())");
+ await database.query("ALTER TABLE qa_automation_settings ADD COLUMN IF NOT EXISTS reconcile_page integer NOT NULL DEFAULT 1");
+ await database.query("CREATE TABLE IF NOT EXISTS qa_automation_events(id text PRIMARY KEY,project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,delivery_id text NOT NULL,body_hash text NOT NULL,kind text NOT NULL,payload jsonb NOT NULL,status text NOT NULL DEFAULT 'received',reason text NOT NULL DEFAULT '',job_id text,admitted_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(project_id,delivery_id))");
+ await database.query("ALTER TABLE qa_automation_events ADD COLUMN IF NOT EXISTS admitted_at timestamptz");
+ await database.query("CREATE INDEX IF NOT EXISTS qa_automation_pending_idx ON qa_automation_events(project_id,status,created_at)");
+ await database.query("CREATE TABLE IF NOT EXISTS qa_weekly_reports(id text PRIMARY KEY,project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,period_start timestamptz NOT NULL,payload jsonb NOT NULL,email_status text NOT NULL DEFAULT 'disabled',email_claimed_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(project_id,period_start))");
 
 }

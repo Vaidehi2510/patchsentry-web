@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 const config: NextConfig = {
   poweredByHeader: false,
-  outputFileTracingIncludes: {"/api/[...path]": ["./scripts/hosted-worker.cjs", "./scripts/hosted-smoke.cjs", "./scripts/hosted-system.cjs", "./scripts/hosted-engine-revision.txt"]},
+  outputFileTracingIncludes: {"/api/[...path]": ["./scripts/hosted-worker.cjs", "./scripts/hosted-artifact.cjs", "./scripts/hosted-smoke.cjs", "./scripts/hosted-system.cjs", "./scripts/hosted-engine-revision.txt"]},
   async headers() {
     return [
       {

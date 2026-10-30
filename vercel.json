@@ -5,6 +5,10 @@
     {
       "path": "/api/internal/maintenance",
       "schedule": "17 7 * * *"
+    },
+    {
+      "path": "/api/internal/weekly",
+      "schedule": "17 8 * * 1"
     }
   ]
 }

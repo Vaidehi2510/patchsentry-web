@@ -33,6 +33,7 @@ export async function prepareRunner({ bot, options, env, repository, readJson, t
     const preflight = await bridge.preflightPortal({ policy: raw, policyPath, botDir: bot.botDir, env: executionEnvironment(env) });
     if (repository && policy.repository.toLowerCase() !== repository.toLowerCase()) heartbeat.missing.push('The local policy repository differs from the portal project.');
     heartbeat.missing.push(...(Array.isArray(preflight.missing) ? preflight.missing : ['Runner preflight did not provide a result.']).map(value => sanitizeText(value, 240)).slice(0, 19));
+    heartbeat.apiAssertions = typeof bridge.validateApiAssertion === "function";
     heartbeat.qualityPlans = typeof bridge.validateQualityPlan === "function";
     heartbeat.platforms = policy.allowedPlatforms || [];
     heartbeat.baselineSuites = Math.min(60, (bot.config?.runners || []).filter(r => r.baseline).length);
@@ -116,7 +117,8 @@ export async function runClaimedJob({ runner, bot, portal, models, env, readJson
     const jobDir = await trustedPath(bot.botDir, `.qa-local/portal-jobs/${job.id}`, { missing: true });
     await fs.mkdir(jobDir, { recursive: true, mode: 0o700 });
     const jobFile = await trustedPath(bot.botDir, path.join(jobDir, 'job.json'), { missing: true });
-    const contents = JSON.stringify(job);
+    const {hostedArtifactUrl, ...engineJob}=job;
+    const contents = JSON.stringify(engineJob);
     try { await fs.writeFile(jobFile, contents, { flag: 'wx', mode: 0o600 }); }
     catch (error) { if (error.code !== 'EEXIST' || (await readJson(jobFile, MAX)).raw !== contents) throw new Error('Saved job identity changed; execution blocked.'); }
     const outputDir = await trustedPath(bot.botDir, path.join(jobDir, 'output'), { missing: true });

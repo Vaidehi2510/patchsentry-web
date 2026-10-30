@@ -46,7 +46,7 @@ Visit `http://127.0.0.1:3000`. PGlite persists accounts and projects under the c
 2. In **Models & agents**, paste and verify your OpenRouter key, select a compatible model, and save your choices. The key field works without a runner.
 3. For a private repository, open **Integrations** and verify a fine-grained GitHub token limited to that repository, with Contents: read-only and Metadata: read-only. Public repositories need no token.
 4. Save a public HTTPS disposable preview and explicit goal assertions in **Testing setup**. The preview must expose its deployed source SHA in `x-qa-revision`.
-5. Request QA for a full source SHA and PR, web build or release. Builds/releases also need a direct artifact download, SHA-256 and deployed artifact identity header. Patchsentry manages the worker and returns reports to the dashboard.
+5. Open **Automation & reports**, select automatic triggers and exclusions, and connect the signed GitHub webhook or CI manifest publisher. Changes then request QA automatically; manual runs remain available for debugging. Builds/releases need verified artifact bytes and deployment identity.
 
 No connector command or always-on customer machine is needed for hosted web QA. See [hosted scope and pilot limits](docs/hosted.md).
 
@@ -172,3 +172,5 @@ See the public [architecture guide](https://patchsentry.vercel.app/architecture)
 ## Hosted execution
 
 See [hosted QA](docs/hosted.md) for the SaaS flow, supported scope, operational limits and deployment verification. Local model and private-network connectors remain optional.
+
+Automatic QA, scheduled coverage reports, optional hosted Slack/email delivery and signed CI release gating are documented in [automation setup](docs/automation.md).

@@ -13,6 +13,7 @@ export interface Runtime {
   connectionFetch?: typeof fetch;
   inferenceFetch?: typeof fetch;
   repositoryFetch?: typeof fetch;
+  slackFetch?: typeof fetch;
   domainResolve?: (name:string)=>Promise<string[][]>;
 }
 let current: Promise<Runtime | null> | undefined;

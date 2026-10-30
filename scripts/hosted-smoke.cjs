@@ -23,6 +23,6 @@ function fail(e){const stdout=String(e.stdout||'').slice(-700),stderr=String(e.s
   command('git',['-c','core.hooksPath=/dev/null','checkout','--detach',revision],{cwd:root+'/engine'});
   command('npm',['ci','--omit=dev','--ignore-scripts','--no-audit','--no-fund'],{cwd:root+'/engine'});
   stage='real engine goal and independent replay';
-  command('node',['--test','test/portal-bridge.test.js'],{cwd:root+'/engine',timeout:120000,env:{...process.env,QA_PORTAL_BROWSER_TEST:'1'}});
+  command('node',['--test','test/portal-bridge.test.js','test/api-assertion.test.js'],{cwd:root+'/engine',timeout:120000,env:{...process.env,QA_PORTAL_BROWSER_TEST:'1'}});
   console.log(JSON.stringify({browsers:checks,engineBridge:'passed',productSourceWrites:false,externalInferenceRequests:0,syntheticLocalInference:true}));
 })().catch(fail);

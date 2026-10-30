@@ -15,7 +15,7 @@ import {operatorAuthentication} from './maintenance';
 import {rate} from './session-security';
 import { policyFor } from './quality';
 
-const bootstrapDomains=['github.com','api.github.com','registry.npmjs.org','*.ubuntu.com','cdn.playwright.dev','playwright.download.prss.microsoft.com','storage.googleapis.com'];
+const bootstrapDomains=['github.com','api.github.com','registry.npmjs.org','*.ubuntu.com','cdn.playwright.dev','playwright.download.prss.microsoft.com','storage.googleapis.com','release-assets.githubusercontent.com','objects.githubusercontent.com'];
 const hash = (v:string) => createHash('sha256').update(v).digest('hex');
 // Deny special-use networks even when an allowed hostname resolves to one later.
 export const deniedNetworks = ['0.0.0.0/8','10.0.0.0/8','100.64.0.0/10','127.0.0.0/8','169.254.0.0/16','172.16.0.0/12','192.0.0.0/24','192.0.2.0/24','192.168.0.0/16','198.18.0.0/15','198.51.100.0/24','203.0.113.0/24','224.0.0.0/4','240.0.0.0/4'];
@@ -69,7 +69,7 @@ export async function startHosted(runtime:Runtime,projectId:string,jobId:string)
     const worker=await readFile(join(process.cwd(),'scripts/hosted-worker.cjs'));
     const engineRevision=(await readFile(join(process.cwd(),'scripts/hosted-engine-revision.txt'),'utf8')).trim();
     if(!/^[a-f0-9]{40}$/.test(engineRevision))throw new Error('Unpinned engine');
-    await sandbox.writeFiles([{path:'/vercel/sandbox/hosted-system.cjs',content:await readFile(join(process.cwd(),'scripts/hosted-system.cjs'))},{path:'/vercel/sandbox/patchsentry-worker.cjs',content:worker},{path:'/vercel/sandbox/qa-input.json',content:Buffer.from(JSON.stringify({job:row.payload,apiKey:credential.apiKey,gitHubToken,callbackToken:callback,callbackUrl:runtime.config.origin+'/api/internal/hosted/'+row.id,engineRevision,allowEvidenceUploads:policy.allowEvidenceUploads}))}]);
+    await sandbox.writeFiles([{path:'/vercel/sandbox/hosted-artifact.cjs',content:await readFile(join(process.cwd(),'scripts/hosted-artifact.cjs'))},{path:'/vercel/sandbox/hosted-system.cjs',content:await readFile(join(process.cwd(),'scripts/hosted-system.cjs'))},{path:'/vercel/sandbox/patchsentry-worker.cjs',content:worker},{path:'/vercel/sandbox/qa-input.json',content:Buffer.from(JSON.stringify({job:row.payload,apiKey:credential.apiKey,gitHubToken,callbackToken:callback,callbackUrl:runtime.config.origin+'/api/internal/hosted/'+row.id,engineRevision,allowEvidenceUploads:policy.allowEvidenceUploads}))}]);
     await sandbox.runCommand({cmd:'node',args:['/vercel/sandbox/patchsentry-worker.cjs'],cwd:'/vercel/sandbox',detached:true,timeoutMs:14*60_000});
     // If cancellation raced with start, stop the VM after launching as well.
     if(!(await q("SELECT id FROM qa_jobs WHERE id=$1 AND project_id=$2 AND status='running'",[jobId,projectId])).rows.length)await sandbox.stop();
