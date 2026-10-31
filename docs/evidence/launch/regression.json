@@ -1,0 +1,60 @@
+{
+  "website": {
+    "tests": 177,
+    "passed": 177,
+    "failed": 0,
+    "skipped": 0,
+    "runtimeMs": 14783.741416,
+    "runtime": "development Node26; separate Node24 container challenge healthy176/176"
+  },
+  "engine": {
+    "tests": 338,
+    "passed": 338,
+    "failed": 0,
+    "skipped": 0,
+    "runtimeMs": 42064.520667,
+    "browserFlags": true,
+    "bothPinnedDockerImagesEnrolled": true
+  },
+  "typecheck": "passed",
+  "productionBuild": "passed",
+  "extraPostPinTests": {
+    "passed": 15,
+    "failed": 0
+  },
+  "audits": {
+    "web": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "engine": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "image": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    }
+  },
+  "websiteNode24": {
+    "tests": 177,
+    "passed": 177,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 47321.412605,
+    "sourceSnapshot": "shipping-source-manifest.json",
+    "scope": "Bounded read-only Linux Node24 test worker; no credentials/network"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "scope": "Local PostgreSQL16 synthetic recovery, same fixed test key; no production backup cadence, key escrow, Neon failover or Vercel traffic routing tested.",
+  "totalMs": 3328,
+  "steps": [
+    {
+      "step": "backup",
+      "ms": 110,
+      "bytes": 116363
+    },
+    {
+      "step": "database-restore",
+      "ms": 270
+    },
+    {
+      "step": "database-restore-verify",
+      "ms": 763,
+      "exitCode": 0
+    },
+    {
+      "step": "lost-artifact-detected",
+      "ms": 506,
+      "exitCode": 1
+    },
+    {
+      "step": "artifact-recovery",
+      "ms": 258
+    },
+    {
+      "step": "artifact-recovery-verify",
+      "ms": 533,
+      "exitCode": 0
+    },
+    {
+      "step": "interrupted-transaction-no-partial-schema",
+      "passed": true
+    },
+    {
+      "step": "prior-release-rollback",
+      "ms": 627,
+      "exitCode": 0
+    }
+  ]
+}

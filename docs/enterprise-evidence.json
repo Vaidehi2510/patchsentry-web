@@ -3,30 +3,35 @@
   "verificationDate": "2026-10-30",
   "scope": "controlled development verification; not independent enterprise assurance",
   "baseline": {
-    "website": "4c6cae5b084fbd3536f026542269d5f7f602fba6",
-    "engine": "4b5fac3677e13ef466b5ecc3d9dd94cdf391b3a1",
+    "website": "e067162",
+    "deployedWebsiteCode": "37e9fbad475dae4a7d4df2c1abfbc6b18b2908bb",
+    "engine": "d0ae18ab0311aff75d4b4c8394670c9a671f5a49",
     "java": "6a15e90"
   },
   "implementation": {
-    "website": "bb9e790",
-    "engine": "d0ae18ab0311aff75d4b4c8394670c9a671f5a49"
+    "website": "See release commit and deployment receipt in launch checkpoint",
+    "engine": "5c1114bdbdd5cb89ed2c1d78580d27b8da1e0c9b",
+    "java": "6a15e90 (unchanged)",
+    "engineCi": "https://github.com/Vaidehi2510/QA-testbot/actions/runs/41162184547",
+    "engineCiStatus": "passed"
   },
   "tests": {
     "website": {
-      "passed": 165,
+      "passed": 177,
       "failed": 0,
       "skipped": 0
     },
     "engineWithRealBrowsers": {
-      "passed": 336,
+      "passed": 338,
       "failed": 0,
-      "skipped": 2,
-      "skipReason": "separately enrolled Docker framework images unavailable"
+      "skipped": 0,
+      "bothPinnedDockerTests": "passed"
     },
     "javaWithRealDatastores": {
       "passed": 40,
       "failed": 0,
-      "skipped": 0
+      "skipped": 0,
+      "scope": "Historical prior-milestone result; Java unchanged, not rerun"
     }
   },
   "websiteTypecheck": "passed",
@@ -36,13 +41,14 @@
     "engineProductionAdvisories": 0
   },
   "browser": {
-    "syntheticAccount": true,
+    "scope": "Launch synthetic account on real local production build; provider responses injected",
+    "optInProfileInactive": true,
+    "prerequisiteActivationBlocked": true,
     "detectedAxeViolations": 0,
     "mobileOverflowWidthsTested": [
       390,
       320
-    ],
-    "pilotAndTimeLogFlows": "passed"
+    ]
   },
   "controlledWorkflow": {
     "scope": "Controlled application; real Chromium UI/API/data assertions with fixture GitHub/Java transports. Not a real customer qualification.",
@@ -152,16 +158,88 @@
   ],
   "readinessDecision": "controlled advisory pilot; no general enterprise QA replacement claim",
   "deployment": {
-    "productionCodeRevision": "37e9fbad475dae4a7d4df2c1abfbc6b18b2908bb",
-    "productionUrl": "https://patchsentry.vercel.app",
-    "deployment": "patchsentry-rk8jg7uhl-vaidehipandya-3024s-projects.vercel.app",
-    "state": "READY",
-    "codeCi": "passed",
-    "publicHome": 200,
-    "publicDocs": 200,
-    "newRolloutDocsPresent": true,
-    "unauthenticatedLedgerHistory": 401,
-    "unauthenticatedOperatorHealth": 401,
-    "productionCustomerDataTesting": false
+    "state": "pending final release publication; previous deployment retained in previousMilestoneVerification",
+    "productionUrl": "https://patchsentry.vercel.app"
+  },
+  "previousMilestoneVerification": {
+    "baseline": {
+      "website": "4c6cae5b084fbd3536f026542269d5f7f602fba6",
+      "engine": "4b5fac3677e13ef466b5ecc3d9dd94cdf391b3a1",
+      "java": "6a15e90"
+    },
+    "implementation": {
+      "website": "bb9e790",
+      "engine": "d0ae18ab0311aff75d4b4c8394670c9a671f5a49"
+    },
+    "tests": {
+      "website": {
+        "passed": 177,
+        "failed": 0,
+        "skipped": 0
+      },
+      "engineWithRealBrowsers": {
+        "passed": 338,
+        "failed": 0,
+        "skipped": 0,
+        "bothPinnedDockerTests": "passed"
+      },
+      "javaWithRealDatastores": {
+        "passed": 40,
+        "failed": 0,
+        "skipped": 0,
+        "scope": "Historical prior-milestone result; Java unchanged, not rerun"
+      }
+    },
+    "browser": {
+      "syntheticAccount": true,
+      "detectedAxeViolations": 0,
+      "mobileOverflowWidthsTested": [
+        390,
+        320
+      ],
+      "pilotAndTimeLogFlows": "passed"
+    },
+    "deployment": {
+      "productionCodeRevision": "37e9fbad475dae4a7d4df2c1abfbc6b18b2908bb",
+      "productionUrl": "https://patchsentry.vercel.app",
+      "deployment": "patchsentry-rk8jg7uhl-vaidehipandya-3024s-projects.vercel.app",
+      "state": "READY",
+      "codeCi": "passed",
+      "publicHome": 200,
+      "publicDocs": 200,
+      "newRolloutDocsPresent": true,
+      "unauthenticatedLedgerHistory": 401,
+      "unauthenticatedOperatorHealth": 401,
+      "productionCustomerDataTesting": false
+    }
+  },
+  "launchValidation": {
+    "classification": "Internal development evidence, not independent assessment",
+    "files": "docs/evidence/launch",
+    "tenantCapacity": "Opt-in; legacy defaults preserved; final scheduler46checks/job ten-job run10/10 completions",
+    "initialDefectChallenge": {
+      "detected": 2,
+      "missed": 2,
+      "validDefects": 4,
+      "falseAlarms": 0,
+      "healthy": 2
+    },
+    "postDiscoveryRegressions": {
+      "originalMissesCaught": 2,
+      "healthyReleasePassed": true,
+      "heldOutEvidence": false
+    },
+    "humanSavings": null,
+    "aiDiagnosisEvaluated": false,
+    "productionProfileActivated": false,
+    "productionFairSchedulingActivated": false,
+    "paidResourcesProvisioned": false,
+    "productionDestructiveTests": false,
+    "node24FinalSuite": {
+      "passed": 177,
+      "failed": 0,
+      "skipped": 0
+    },
+    "ledgerReceipt": "docs/evidence/launch/ledger-receipt.json"
   }
 }

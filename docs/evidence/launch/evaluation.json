@@ -1,0 +1,89 @@
+{
+  "scope": "Patchsentry own release QA; actual backend release tests on read-only copies of the candidate",
+  "partition": "Internal development challenge, not independent held-out customer qualification",
+  "caseManifestSha256": "7569ecc6bdd7da56175e31ed1e25ad1b66a811840ba77176cb9bdf3ed564cde1",
+  "results": [
+    {
+      "id": "domain-lookalike",
+      "label": "defect",
+      "exitCode": 1,
+      "tests": 172,
+      "failures": 1,
+      "valid": true,
+      "alarm": true,
+      "runtimeMs": 48939,
+      "logSha256": "2fcf90be552a9b64805e69847c3483818ae2c97b9a4ee6a869e21dda53e9044b"
+    },
+    {
+      "id": "offboarding-bypass",
+      "label": "defect",
+      "exitCode": 1,
+      "tests": 172,
+      "failures": 1,
+      "valid": true,
+      "alarm": true,
+      "runtimeMs": 48969,
+      "logSha256": "05b451d195e83414c2790de3162aea084c0f7b65d2c042ffdab942ad15fba326"
+    },
+    {
+      "id": "payload-integrity-bypass",
+      "label": "defect",
+      "exitCode": 0,
+      "tests": 172,
+      "failures": 0,
+      "valid": true,
+      "alarm": false,
+      "runtimeMs": 50474,
+      "logSha256": "422af957517e33f387cc04aef70996db22b748d9c83534e191716f28981d193d"
+    },
+    {
+      "id": "archive-receipt-bypass",
+      "label": "defect",
+      "exitCode": 0,
+      "tests": 172,
+      "failures": 0,
+      "valid": true,
+      "alarm": false,
+      "runtimeMs": 50569,
+      "logSha256": "52cd7bf940f552e0cd64b4b84608ac12a4ffe4ff7604087166c3b6e0cd400687"
+    },
+    {
+      "id": "healthy-original",
+      "label": "healthy",
+      "exitCode": 0,
+      "tests": 172,
+      "failures": 0,
+      "valid": true,
+      "alarm": false,
+      "runtimeMs": 55210,
+      "logSha256": "c58d1ea24631b167637ba4f9efe6a5f0237eba225fc5a131cf0d4f5ff6d26074"
+    },
+    {
+      "id": "healthy-comment",
+      "label": "healthy",
+      "exitCode": 0,
+      "tests": 172,
+      "failures": 0,
+      "valid": true,
+      "alarm": false,
+      "runtimeMs": 55449,
+      "logSha256": "ea581b079e7b19c90638e0854818e33796876437d70be6bee4b3c479ea2a9989"
+    }
+  ],
+  "detected": 2,
+  "missed": 2,
+  "falseAlarms": 0,
+  "defects": 4,
+  "healthy": 2,
+  "invalid": 0,
+  "wallMs": 155115,
+  "humanInterventionMinutes": null,
+  "manualBaselineMinutes": null,
+  "staffingSavings": null,
+  "actualProviderCostUsd": null,
+  "ai": {
+    "status": "not executed",
+    "reason": "No authorized inference credential/local service",
+    "diagnosisAccuracy": null
+  }
+}

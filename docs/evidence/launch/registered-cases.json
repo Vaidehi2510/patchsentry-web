@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "registeredBeforeExecution": true,
+  "workload": "Patchsentry own release QA; actual backend release tests on read-only copies of the candidate",
+  "baseline": "Existing CI/tool-assisted deterministic release suite, same tests and resources",
+  "oracle": "Predetermined code mutation and healthy label; existing tests are frozen before execution",
+  "partition": "Internal development challenge, not independent held-out customer qualification",
+  "cases": [
+    {"id":"domain-lookalike","label":"defect","file":"src/lib/server/domain-policy.ts","before":"email.trim().toLowerCase().split('@')[1] === domain","after":"email.trim().toLowerCase().endsWith(domain)","expected":"Reject othercompany.test when company.test is required","category":"tenant boundary"},
+    {"id":"offboarding-bypass","label":"defect","file":"src/lib/server/domain-policy.ts","before":"if((await q('SELECT d.id","after":"if(false && (await q('SELECT d.id","expected":"Inactive directory identities must lose access on next request","category":"identity"},
+    {"id":"payload-integrity-bypass","label":"defect","file":"src/lib/server/assessment-ledger.ts","before":"if (hash(bytes) !== row.payload_digest)","after":"if (false && hash(bytes) !== row.payload_digest)","expected":"A decrypted payload with a mismatched receipt digest is rejected","category":"ledger integrity"},
+    {"id":"archive-receipt-bypass","label":"defect","file":"src/lib/server/ledger-bridge.ts","before":"if (\n        receipt.projectId !== cfg.remote_project ||","after":"if (false && (\n        receipt.projectId !== cfg.remote_project ||","alsoBefore":"receipt.archived !== true\n      )","alsoAfter":"receipt.archived !== true\n      ))","expected":"A mismatched remote archive receipt must never confirm delivery","category":"archive integrity"},
+    {"id":"healthy-original","label":"healthy","expected":"Original candidate release suite passes"},
+    {"id":"healthy-comment","label":"healthy","file":"src/lib/server/domain-policy.ts","append":"\n// Release QA healthy control: documentation-only comment.\n","expected":"Documentation-only change does not create a test alarm"}
+  ],
+  "metrics": {"detection":"Nonzero suite exit with assertion failures; syntax/infrastructure errors are invalid trials, not detected defects","falseAlarm":"Healthy trial with assertion failures","miss":"Valid defect mutation with all assertions passing","flaky":"Disagreement across identical healthy repeated executions","humanTime":"Not measured without authentic logs","AI":"Separate blocked evaluation; no inference key or local service available"}
+}

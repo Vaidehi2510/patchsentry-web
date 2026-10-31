@@ -1,0 +1,10 @@
+{
+  "scope": "Actual local test worker killed; PostgreSQL durable queue and recovery controller; lease deadline advanced in fixture SQL, not elapsed in real time. No Vercel deployment/traffic switch tested.",
+  "queueSurvivedSimulatedDeploymentPause": true,
+  "workerInterrupted": true,
+  "automaticRetry": false,
+  "failedAssessmentBecamePass": false,
+  "otherTenantProgressed": true,
+  "recoveryControllerMs": 5,
+  "totalMs": 1429
+}

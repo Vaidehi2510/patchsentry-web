@@ -12,3 +12,5 @@
 # Local-only verification harnesses import intentionally excluded test helpers.
 /scripts/enterprise-e2e-fixture.ts
 /scripts/enterprise-restore-fixture.ts
+
+/tools

@@ -1,3 +1,5 @@
+import {enterpriseProfileState,applyEnterpriseProfile} from './enterprise-profile';
+import {purgeCapacity,poolState,savePool,saveTenant,capacityView} from './capacity';
 import {executionEvidenceReasons} from '../execution-evidence';
 import {saveQualityPolicy} from './quality';
 import {recordPilotWork,pilotWorkState} from './pilot-work';
@@ -16,7 +18,7 @@ import {weeklyReports,generateWeeklyReport,deliverWeekly,scheduledWeekly} from '
 import {cloudSlackStatus,connectCloudSlack,deliverCloudNotifications} from './slack-cloud';
 import {repositoryConnection,connectRepository,disconnectRepository} from './repository-connection';
 import {after} from 'next/server';
-import {startHosted,stopHosted,completeHosted,verifyHostedInfrastructure} from './hosted';
+import {startHosted,stopHosted,completeHosted,verifyHostedInfrastructure,drainHosted} from './hosted';
 import {providerStatus,connectProvider,removeProvider,probeProvider} from './provider-vault';
 import {maintenance,operatorAuthentication} from './maintenance';
 import {planSnapshot,qualityView,saveRequirement,saveBrief,saveBug,updateBug,metrics,saveUsage,policyFor,requirementCoverage} from './quality';
@@ -344,9 +346,12 @@ async function dispatch(
     throw new ApiError(409,'This hosted job cannot accept that action.');
   }
   if(path==='/api/internal/hosted-check'&&request.method==='POST')return json(await verifyHostedInfrastructure(request,runtime));
+  if(path==='/api/internal/capacity'){operatorAuthentication(request,runtime);if(request.method==='GET')return json({policy:await poolState(runtime.database.query.bind(runtime.database))});if(request.method==='PUT')return json(await savePool(runtime,await readBody(request)));throw new ApiError(405,'Method not allowed.');}
+  const tenantCapacity=/^\/api\/internal\/capacity\/tenants\/([A-Za-z0-9_-]{1,100})$/.exec(path);if(tenantCapacity&&request.method==='PUT'){operatorAuthentication(request,runtime);return json(await saveTenant(runtime,tenantCapacity[1],await readBody(request)));}
+  if(path==='/api/internal/hosted/drain'&&request.method==='POST'){operatorAuthentication(request,runtime);(runtime.defer||after)(()=>trackedOperation(runtime,'hosted-drain',async()=>{const recovery=await recoverExecutions(runtime);return {...await drainHosted(runtime),...recovery};}));return json({accepted:true});}
   if(path==='/api/internal/operations'&&request.method==='GET'){operatorAuthentication(request,runtime);return json(await operationHealth(runtime));}
   if(path==='/api/internal/weekly'&&request.method==='GET'){operatorAuthentication(request,runtime);(runtime.defer||after)(async()=>{await trackedOperation(runtime,'weekly',async()=>{await scheduledWeekly(runtime);const rows=(await runtime.database.query<{project_id:string}>("SELECT DISTINCT project_id FROM qa_notifications WHERE status='pending' ORDER BY project_id LIMIT 20")).rows;for(const row of rows)await deliverCloudNotifications(runtime,row.project_id);return {processed:true};});});return json({accepted:true});}
-  if(path==='/api/internal/maintenance' &&request.method==='GET'){const result=await maintenance(request,runtime);(runtime.defer||after)(async()=>{await trackedOperation(runtime,'maintenance',async()=>{const recovered=await recoverExecutions(runtime);await automationMaintenance(runtime);await pollDeviceRuns(runtime);await scheduledLedger(runtime);return {...result,...recovered};});});return json(result);}
+  if(path==='/api/internal/maintenance' &&request.method==='GET'){const result=await maintenance(request,runtime);(runtime.defer||after)(async()=>{await trackedOperation(runtime,'maintenance',async()=>{const recovered=await recoverExecutions(runtime);await purgeCapacity(runtime);await automationMaintenance(runtime);await pollDeviceRuns(runtime);await scheduledLedger(runtime);const capacity=await drainHosted(runtime);return {...result,...recovered,capacity};});});return json(result);}
   if(path.startsWith('/api/account')){if(request.method!=='GET')requireOrigin(request,runtime.config.origin);return accountEndpoint(request,runtime,request.method==='GET'?undefined:await readBody(request));}
   if(path.startsWith('/api/security/')){if(request.method!=='GET')requireOrigin(request,runtime.config.origin);return securityEndpoint(request,runtime,request.method==='POST'?await readBody(request):undefined);}
   if (path.startsWith("/api/auth/")) {
@@ -503,9 +508,10 @@ async function dispatch(
   if(attachments&&request.method==='GET'){const p=await accessibleProject(request,runtime,attachments[1],user.id);return json(await evidenceList(runtime,p.id,attachments[2]));}
   const assurance=/^\/api\/projects\/([a-f0-9-]{36})\/(assurance|pilots|assurance-evidence|build-provenance|ledger)(?:\/([a-zA-Z0-9-]{1,100})(?:\/(review|observe|worklog))?)?$/.exec(path);
   if(assurance){const area=assurance[2],action=assurance[3],p=await accessibleProject(request,runtime,assurance[1],user.id,request.method==='GET'?'viewer':area==='ledger'||area==='assurance'?'owner':area==='assurance-evidence'?'admin':'qa');
-   if(request.method==='GET'){if(area==='pilots'&&action==='evaluation')return json(await pilotWorkState(runtime,p.id));if(area==='ledger'&&action==='history')return json(await releaseHistory(runtime,p.id,url.searchParams.get('recordId')||'',url.searchParams.has('before')?parse(z.coerce.number().int().positive(),url.searchParams.get('before')):undefined));if(area==='ledger')return json(action==='verify'?await verifyLedger(runtime,p.id):action?await ledgerPayload(runtime,p.id,action):await ledgerState(runtime,p.id,url.searchParams.has('before')?parse(z.coerce.number().int().positive(),url.searchParams.get('before')):undefined));return json({...await assuranceState(runtime,p.id),operations:await operationsState(runtime,p.id)});}
+   if(request.method==='GET'){if(area==='assurance'&&action==='enterprise')return json(await enterpriseProfileState(runtime,p.id));if(area==='pilots'&&action==='evaluation')return json(await pilotWorkState(runtime,p.id));if(area==='ledger'&&action==='history')return json(await releaseHistory(runtime,p.id,url.searchParams.get('recordId')||'',url.searchParams.has('before')?parse(z.coerce.number().int().positive(),url.searchParams.get('before')):undefined));if(area==='ledger')return json(action==='verify'?await verifyLedger(runtime,p.id):action?await ledgerPayload(runtime,p.id,action):await ledgerState(runtime,p.id,url.searchParams.has('before')?parse(z.coerce.number().int().positive(),url.searchParams.get('before')):undefined));return json({...await assuranceState(runtime,p.id),operations:await operationsState(runtime,p.id)});}
    if(area==='pilots'&&assurance[4]==='worklog'&&request.method==='POST')return json(await recordPilotWork(runtime,p.id,action!,await readBody(request),user.name));
    if(area==='assurance'||area==='ledger'||area==='assurance-evidence'){const state=await securityState(request,runtime);if(!state.proof?.mfa_verified_at||Date.now()-Date.parse(state.proof.mfa_verified_at)>15*60000)throw new ApiError(403,'Verify MFA for account changes before changing assurance or archive policy.');}
+   if(area==='assurance'&&action==='enterprise'&&request.method==='POST')return json(await applyEnterpriseProfile(runtime,p.id,await readBody(request),user.id));
    if(area==='assurance'&&request.method==='PATCH')return json(await saveAssurancePolicy(runtime,p.id,await readBody(request),user.id));
    if(area==='pilots'&&request.method==='POST')return json(action?assurance[4]==='review'?await reviewPilot(runtime,p.id,action,user.id):await observePilot(runtime,p.id,action,await readBody(request)):await createPilot(runtime,p.id,await readBody(request),user.id));
    if(area==='assurance-evidence'&&request.method==='POST')return json(action?await reviewAssuranceEvidence(runtime,p.id,action,user.id):await assuranceEvidence(runtime,p.id,await readBody(request),user.id));
@@ -689,7 +695,7 @@ export async function handleRequest(
     );
   } catch (error) {
     if (error instanceof ApiError || error instanceof JobError || error instanceof SecurityError)
-      return json({ error: error.message }, error.status);
+      {const response=json({ error: error.message }, error.status);if(error.status===429)response.headers.set('retry-after','60');return response;}
     // Database credentials, session data and provider payloads must not reach responses.
     return json(
       {

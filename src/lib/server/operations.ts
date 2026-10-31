@@ -1,3 +1,4 @@
+import {capacityView} from './capacity';
 import { randomUUID } from "node:crypto";
 import type { Runtime } from "./runtime";
 import { audit, queueNotification } from "./team";
@@ -40,6 +41,7 @@ export async function operationsState(r: Runtime, id: string) {
     jobs,
     archives,
     pendingEvents: pending,
+    capacity:await capacityView(r,id),
     hosted: {
       limits: hostedLimits,
       sharedMonthlyUsed: usage.used,
@@ -56,7 +58,7 @@ export async function operationsState(r: Runtime, id: string) {
 export async function recoverExecutions(r: Runtime) {
   const candidates = (
     await r.database.query<{ id: string; project_id: string }>(
-      "SELECT id,project_id FROM qa_jobs WHERE (status='running' AND lease_expires_at<=now()) OR (execution_mode='hosted' AND status='queued' AND created_at<now()-interval '5 minutes') ORDER BY updated_at LIMIT 100",
+      "SELECT id,project_id FROM qa_jobs WHERE (status='running' AND lease_expires_at<=now()) OR (execution_mode='hosted' AND status='queued' AND ((capacity_mode='legacy' AND created_at<now()-interval '5 minutes') OR (capacity_mode='fair' AND queue_expires_at<=now()))) ORDER BY updated_at LIMIT 100",
     )
   ).rows;
   let recovered = 0;
@@ -69,7 +71,7 @@ export async function recoverExecutions(r: Runtime) {
       ]);
       const row = (
         await c.query<{ payload: any; attempts: number }>(
-          "UPDATE qa_jobs SET status='blocked',message='Execution expired or startup was interrupted. Product behavior is untested; inspect prior evidence before explicitly retrying.',lease_hash=NULL,callback_hash=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=$1 AND project_id=$2 AND ((status='running' AND lease_expires_at<=now()) OR (execution_mode='hosted' AND status='queued' AND created_at<now()-interval '5 minutes')) RETURNING payload,attempts",
+          "UPDATE qa_jobs SET status='blocked',message='Execution expired or startup was interrupted. Product behavior is untested; inspect prior evidence before explicitly retrying.',lease_hash=NULL,callback_hash=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=$1 AND project_id=$2 AND ((status='running' AND lease_expires_at<=now()) OR (execution_mode='hosted' AND status='queued' AND ((capacity_mode='legacy' AND created_at<now()-interval '5 minutes') OR (capacity_mode='fair' AND queue_expires_at<=now())))) RETURNING payload,attempts",
           [job.id, job.project_id],
         )
       ).rows[0];
@@ -125,7 +127,7 @@ export async function recoverExecutions(r: Runtime) {
 
 export async function trackedOperation(
   r: Runtime,
-  name: "maintenance" | "weekly",
+  name: "maintenance" | "weekly" | "hosted-drain",
   work: () => Promise<unknown>,
 ) {
   const runId = randomUUID(),

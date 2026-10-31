@@ -1,0 +1,23 @@
+{
+  "bytes": 10222615,
+  "xact_commit": 280,
+  "xact_rollback": 1,
+  "blks_read": 27,
+  "blks_hit": 72178,
+  "temp_bytes": 0,
+  "deadlocks": 0,
+  "tup_inserted": 3742,
+  "tup_updated": 456,
+  "scope": "Post-workload synthetic final fixture DB cumulative statistics, not production or peak database resource consumption",
+  "postRunContainerSample": {
+    "BlockIO": "4.88MB / 199MB",
+    "CPUPerc": "0.00%",
+    "Container": "ps-launch-postgres",
+    "ID": "b8688c91fde9",
+    "MemPerc": "7.99%",
+    "MemUsage": "81.78MiB / 1GiB",
+    "Name": "ps-launch-postgres",
+    "NetIO": "1.28MB / 2.04MB",
+    "PIDs": "6"
+  }
+}

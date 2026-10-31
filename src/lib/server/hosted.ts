@@ -1,3 +1,5 @@
+import {meteredHosted,closeHostedReservation} from './hosted-meter';
+import {poolState,claimHosted,archiveCapacity,releaseReservation} from './capacity';
 import {triageAssessment} from './automatic-triage';
 import {archiveAssessment,appendLedger} from './assessment-ledger';
 import {currentVisualDigest,hostedBaselines} from './visual-baselines';
@@ -49,11 +51,22 @@ export const hostedAdapter:HostedAdapter={
   async create(host,artifactHost){return Sandbox.create({persistent:false,timeout:15*60_000,resources:{vcpus:2},image:'vercel/sandbox/universal:latest',networkPolicy:{allow:[host,...(artifactHost?[artifactHost]:[]),...bootstrapDomains,'openrouter.ai','patchsentry.vercel.app'],subnets:{deny:deniedNetworks}},tags:{app:'patchsentry',purpose:'hosted-qa'}});},
   async get(id){return Sandbox.get({name:id});},
 };
-type HostedRow={id:string;project_id:string;payload:JobInput;status:string;attempts:number;sandbox_id:string|null;callback_hash:string|null;hosted_expires_at:string|null;};
+type HostedRow={id:string;project_id:string;payload:JobInput;status:string;attempts:number;sandbox_id:string|null;callback_hash:string|null;hosted_expires_at:string|null;capacity_mode?:string;};
 export async function startHosted(runtime:Runtime,projectId:string,jobId:string) {
-  const q=runtime.database.query.bind(runtime.database),adapter=runtime.hosted||hostedAdapter;
+ if((await poolState(runtime.database.query.bind(runtime.database))).mode==='fair'){await drainHosted(runtime);return;}
+ return executeHosted(runtime,projectId,jobId);
+}
+export async function drainHosted(runtime:Runtime){
+ const pool=await poolState(runtime.database.query.bind(runtime.database));if(pool.mode!=='fair')return {started:0};
+ const claims:any[]=[];for(let i=0;i<Math.min(pool.limits.active,4);i++){const row=await claimHosted(runtime);if(!row)break;claims.push(row);}
+ await Promise.allSettled(claims.map(async row=>{try{await archiveCapacity(runtime,row);await executeHosted(runtime,row.project_id,row.id,row);}catch{await runtime.database.query("UPDATE qa_jobs SET status='blocked',message='Hosted dispatch failed before a complete assessment was available.',updated_at=now() WHERE id=$1 AND status='running'",[row.id]);await releaseReservation(runtime,row.id,false,'dispatch-error');}}));
+ return {started:claims.length};
+}
+async function executeHosted(runtime:Runtime,projectId:string,jobId:string,preclaimed?:any) {
+  const q=runtime.database.query.bind(runtime.database),baseAdapter=runtime.hosted||hostedAdapter;
+  const adapter=preclaimed?.capacity_mode==='fair'?meteredHosted(runtime,jobId,baseAdapter):baseAdapter;
   // Atomic claim prevents repeated requests, tabs, or deployment retries from starting paid duplicate work.
-  const row=(await q<HostedRow>("UPDATE qa_jobs SET status='running',attempts=attempts+1,runner_id='hosted',lease_expires_at=now()+interval '16 minutes',message='Starting an isolated hosted QA worker.',updated_at=now() WHERE project_id=$1 AND id=$2 AND status='queued' AND attempts=0 AND execution_mode='hosted' RETURNING *",[projectId,jobId])).rows[0];
+  const row:HostedRow|undefined=preclaimed||(await q<HostedRow>("UPDATE qa_jobs SET status='running',attempts=attempts+1,runner_id='hosted',lease_expires_at=now()+interval '16 minutes',message='Starting an isolated hosted QA worker.',updated_at=now() WHERE project_id=$1 AND id=$2 AND status='queued' AND attempts=0 AND execution_mode='hosted' RETURNING *",[projectId,jobId])).rows[0];
   if(!row)return;
   let sandbox:HostedSandbox|undefined;
   try {
@@ -69,8 +82,9 @@ export async function startHosted(runtime:Runtime,projectId:string,jobId:string)
     const callback=randomBytes(32).toString('base64url');
     const unitResult=await executeHostedUnits(runtime,adapter,row.id,projectId,row.payload);
     if(unitResult)await q('UPDATE qa_jobs SET hosted_unit_result=$2::jsonb WHERE id=$1',[row.id,JSON.stringify(unitResult)]);
+    if(!(await q("SELECT id FROM qa_jobs WHERE project_id=$1 AND id=$2 AND status='running'",[projectId,jobId])).rows.length){await stopHosted(runtime,projectId,jobId);return;}
     sandbox=await adapter.create(preview.hostname,artifactHost);
-    const registered=await q("UPDATE qa_jobs SET sandbox_id=$3,callback_hash=$4,hosted_expires_at=now()+interval '15 minutes',message='Hosted worker preparing browsers and reading the requested source revision.',updated_at=now() WHERE project_id=$1 AND id=$2 AND status='running' RETURNING id",[projectId,jobId,sandbox.name,hash(callback)]);
+    const registered=await q("UPDATE qa_jobs SET sandbox_id=$3,callback_hash=$4,hosted_expires_at=now()+interval '15 minutes',lease_expires_at=now()+interval '16 minutes',message='Hosted worker preparing browsers and reading the requested source revision.',updated_at=now() WHERE project_id=$1 AND id=$2 AND status='running' RETURNING id",[projectId,jobId,sandbox.name,hash(callback)]);
     if(!registered.rows.length){await sandbox.stop();return;}
     const visualBaselines=row.payload.testingProfile.visualRegression?await hostedBaselines(runtime,projectId):[];
     if(row.payload.testingProfile.visualRegression)await q('UPDATE qa_jobs SET hosted_visual_digest=$2 WHERE id=$1',[row.id,hash(JSON.stringify(visualBaselines.map(b=>[b.record.key,b.record.sha256]).sort((a,b)=>a[0].localeCompare(b[0]))))]);
@@ -84,12 +98,18 @@ export async function startHosted(runtime:Runtime,projectId:string,jobId:string)
     if(!(await q("SELECT id FROM qa_jobs WHERE id=$1 AND project_id=$2 AND status='running'",[jobId,projectId])).rows.length)await sandbox.stop();
     await audit(q,projectId,'Hosted worker','qa.started',jobId);
     await queueNotification(q,projectId,'started',jobId+':hosted-started',{repository:row.payload.repository,revision:row.payload.revision,jobId,target:row.payload.target,pr:row.payload.pr,requestedBy:row.payload.requestedBy});
-  }catch(e){if(sandbox)await sandbox.stop().catch(()=>{});const message=e instanceof JobError?e.message:'Hosted execution could not start. Cloud permissions, available quota or worker preparation need attention; no automatic retry was made.';await q("UPDATE qa_jobs SET status='blocked',message=$3,callback_hash=NULL,lease_expires_at=NULL,updated_at=now() WHERE project_id=$1 AND id=$2 AND status='running'",[projectId,jobId,message]);await audit(q,projectId,'Hosted worker','qa.hosted_blocked',jobId);}
+  }catch(e){let stopped=false;if(sandbox)try{await sandbox.stop();stopped=true;}catch{}const message=e instanceof JobError?e.message:'Hosted execution could not start. Cloud permissions, available quota or worker preparation need attention; no automatic retry was made.';await q("UPDATE qa_jobs SET status='blocked',message=$3,callback_hash=NULL,lease_expires_at=NULL,updated_at=now() WHERE project_id=$1 AND id=$2 AND status='running'",[projectId,jobId,message]);if(row.capacity_mode==='fair')await closeHostedReservation(runtime,jobId,'blocked');else await releaseReservation(runtime,jobId,stopped,'blocked');await audit(q,projectId,'Hosted worker','qa.hosted_blocked',jobId);}
 }
 export async function stopHosted(runtime:Runtime,projectId:string,jobId:string) {
-  const row=(await runtime.database.query<{sandbox_id:string}>("SELECT sandbox_id FROM qa_jobs WHERE project_id=$1 AND id=$2 AND execution_mode='hosted'",[projectId,jobId])).rows[0];
-  if(row?.sandbox_id)await(runtime.hosted||hostedAdapter).get(row.sandbox_id).then(s=>s.stop()).catch(()=>{});
+ const row=(await runtime.database.query<{sandbox_id:string|null;status:string}>("SELECT sandbox_id,status FROM qa_jobs WHERE project_id=$1 AND id=$2 AND execution_mode='hosted'",[projectId,jobId])).rows[0];if(!row)return;
+ const recorded=(await runtime.database.query<{vm_id:string}>("SELECT vm_id FROM qa_hosted_stages WHERE job_id=$1 AND vm_id IS NOT NULL AND status<>'stopped'",[jobId])).rows;
+ const fair=(await runtime.database.query("SELECT job_id FROM qa_hosted_reservations WHERE job_id=$1",[jobId])).rows.length>0;
+ let confirmed=false;const adapter=fair?meteredHosted(runtime,jobId,runtime.hosted||hostedAdapter):(runtime.hosted||hostedAdapter);
+ for(const name of new Set([...recorded.map(s=>s.vm_id),...(row.sandbox_id?[row.sandbox_id]:[])])){try{await adapter.get(name).then(s=>s.stop());confirmed=true;}catch{/* Reservations remain held for uncertain provider termination. */}}
+ if(fair)await closeHostedReservation(runtime,jobId,row.status);else await releaseReservation(runtime,jobId,confirmed,row.status);
+ if(confirmed)await drainHosted(runtime);
 }
+
 const Completion=z.object({status:z.enum(['completed','blocked','failed']),report:RunInputSchema.optional(),message:z.string().max(600),durationMs:z.number().int().min(0).max(900000)}).strict();
 export async function completeHosted(runtime:Runtime,jobId:string,request:Request,body:unknown){
   const input=Completion.safeParse(body);if(!input.success)throw new JobError(400,'Invalid hosted result.');

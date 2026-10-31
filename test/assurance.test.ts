@@ -529,6 +529,11 @@ test("build provenance requires the exact successful GitHub workflow, artifact d
   );
 });
 
+test('company control template is project-scoped, owner-only and cannot apply without identity prerequisites',async()=>{
+ const path=root()+'/assurance/enterprise';assert.equal((await api(path,'GET',undefined,'outsider')).status,404);const visible=await api(path,'GET',undefined,'viewer');assert.equal(visible.status,200);const state=await visible.json();assert.equal(state.active,false);
+ const body={expectedVersion:state.version,expectedQualityVersion:state.qualityVersion,expectedAssuranceVersion:state.assuranceVersion,requirePhysicalDevices:false,requireArchiveAcknowledgment:false,approveEvidenceProcessing:true};assert.equal((await api(path,'POST',body,'viewer')).status,403);assert.equal((await api(path,'POST',body,'admin')).status,403);const denied=await api(path,'POST',body);assert.equal(denied.status,409,await denied.clone().text());assert.ok(!(await runtime.database.query('SELECT project_id FROM qa_enterprise_profiles WHERE project_id=$1',[project])).rows.length);
+});
+
 test("project deletion erases retained ledger data while individual history edits remain forbidden", async () => {
   assert.equal((await api(root(), "DELETE", {})).status, 200);
   assert.equal(

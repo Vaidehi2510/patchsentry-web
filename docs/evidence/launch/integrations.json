@@ -1,0 +1,23 @@
+{
+  "scope": "Local authorized access discovery; production encrypted customer connections not exported or inspected",
+  "entra": {
+    "status": "not executed against a real provider",
+    "availableLocalAzureCredentials": false,
+    "next": "Company identity admin registers a tenant-pinned application and completes documented lifecycle matrix"
+  },
+  "aws": {
+    "status": "not executed against real devices",
+    "availableLocalAwsCredentials": false,
+    "next": "Company AWS admin supplies scoped temporary access, disposable uploads and explicit device budget"
+  },
+  "ai": {
+    "status": "not executed",
+    "availableLocalInferenceKey": false,
+    "loopbackOllama": "connection refused",
+    "next": "Project owner connects an inference key securely or an enrolled local endpoint and approves a bounded evaluation budget"
+  },
+  "independentReview": {
+    "status": "not performed",
+    "next": "Named external reviewer accepts staging scope and returns authentic signed/date-stamped findings"
+  }
+}

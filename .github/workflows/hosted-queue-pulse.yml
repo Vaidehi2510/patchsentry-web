@@ -1,0 +1,35 @@
+name: Optional hosted queue pulse
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+permissions: {}
+concurrency:
+  group: hosted-queue-pulse
+  cancel-in-progress: false
+jobs:
+  pulse:
+    if: vars.PATCHSENTRY_QUEUE_PULSE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Request the enrolled hosted queue drain
+        env:
+          PORTAL_URL: ${{ vars.PATCHSENTRY_PORTAL_URL }}
+          OPERATOR_SECRET: ${{ secrets.PATCHSENTRY_CRON_SECRET }}
+        run: |
+          python3 - <<'PY'
+          import os, urllib.request, urllib.parse
+          origin=os.environ.get('PORTAL_URL','')
+          parsed=urllib.parse.urlsplit(origin)
+          if parsed.scheme!='https' or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ('','/'):
+              raise SystemExit('Configure an exact trusted HTTPS portal origin.')
+          secret=os.environ.get('OPERATOR_SECRET','')
+          if not secret: raise SystemExit('Configure the operator secret securely in repository Actions secrets.')
+          request=urllib.request.Request(origin.rstrip('/')+'/api/internal/hosted/drain',data=b'',method='POST',headers={'Authorization':'Bearer '+secret})
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*args):return None
+          with urllib.request.build_opener(NoRedirect).open(request,timeout=30) as response:
+              if response.status!=200:raise SystemExit('Queue pulse rejected.')
+          print('Authenticated drain request accepted; inspect the portal heartbeat for actual completion.')
+          PY

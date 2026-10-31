@@ -37,3 +37,49 @@ Local dependency audits reported no production advisories at this verification;
 that is neither a penetration test nor independent assurance. No real company
 Entra tenant, physical-device account, customer backup or assessor was supplied.
 The implementation author's tests cannot close those external evidence items.
+
+## Launch reviewer package
+
+`tools/launch/package-review.py` exports selected repository files, source revisions,
+diffs, SHA-256 inventories, dependency locks, public Docker recipes and synthetic
+launch evidence into an ignored local archive. It excludes `.env*`, `.local`,
+`.vercel`, `.git`, dependencies, build output, symlinks and production data. Supply
+reviewed engine and optional Java checkout paths through the documented environment
+variables; no cloud key or customer source is required for packaging. Verify the
+external archive digest and per-file `SHA256SUMS` before review. Source snapshots
+for measurements have their own manifests; a later documentation commit is not
+silently represented as the measured source.
+
+Trust boundaries to attack:
+
+1. Browser → authenticated Next API: owner/admin/QA/viewer, recent MFA, trusted
+   devices, explicit project membership and domain/SSO rechecks on every artifact.
+2. Tenant → shared PostgreSQL: row/project scope, ten-connection pool, serialized
+   fair claims, company quota membership, reservation lifetime and deletion/reset
+   resistance. Company grouping is capacity accounting, not a new authorization grant.
+3. API → Vercel microVM: provider create ambiguity, time/concurrency/stage bounds,
+   bootstrap/source/model credential separation, callbacks and cancellation races.
+   Local Docker tests do not attest Vercel's microVM implementation.
+4. API → model/GitHub/preview/AWS/email/Slack: exact approved endpoints, server-held
+   scoped credentials, read-only source, authorized preview mutations and recorded
+   external data transfer. Restricted-domain notification prohibition remains.
+5. Database → hosted Ledger → optional Java archive: encrypted payload versus
+   immutable receipt digest, destination/claim/receipt binding, retention, external
+   head custody and administrator replacement threat. Java is not deployed here.
+6. Operator → deployment/backup/queue: secret custody, drain monitoring, additive
+   migrations, unknown provider costs, backup/key/deletion recovery and rollback.
+
+Reproduce engine offline tests from `tools/test-image`; website `npm test`,
+typecheck/build; workload labels, snapshot/runtime preparation, local PostgreSQL
+load/recovery and challenge scripts under `tools/launch` and `test/launch`.
+No public-company or former-employer repository is needed. Run paid integration
+matrices only after scoped company consent and explicit budgets.
+
+A finding must identify reviewer/name/organization, review date and scope,
+independence/conflict statement, affected revision/environment, reproduction,
+expected/actual behavior, severity, evidence hashes, owner, remediation revision
+and external retest result. Start from `tools/launch/reviewer-findings.template.json`.
+Retain unresolved findings; do not replace an authentic result with an internal
+interpretation. No external findings were supplied or invented. The initial
+challenge's two missed integrity regressions are **internal** findings and their
+post-discovery closure is not independent security assurance.

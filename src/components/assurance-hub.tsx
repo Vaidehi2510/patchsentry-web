@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import type { Project } from "@/lib/contracts";
+import {EnterpriseProfile} from "./enterprise-profile";
 import {PilotEvaluation} from "./pilot-evaluation";
 import benchmark from "@/data/todomvc-benchmark.json";
 async function call(url: string, method = "GET", body?: unknown) {
@@ -359,7 +360,7 @@ export function AssuranceHub({
         ))}
       </section>
       <PilotEvaluation root={root} suites={state?.suites||[]} write={qa} demo={demo}/>
-      {state?.operations&&<section className="panel operations-panel"><h2>Unattended operations</h2><p>{state.operations.notice}</p><p>Shared pilot capacity: {state.operations.hosted.sharedMonthlyUsed}/{state.operations.hosted.limits.monthlyAssessments} monthly assessments; {state.operations.hosted.sharedActive}/{state.operations.hosted.limits.globalActive} active. Provider account quota has not been independently verified.</p><p>Authenticated maintenance: {state.operations.maintenanceConfigured?'configured; successful execution still needs monitoring':'not configured; operator setup required'}.</p><p className="fineprint">{state.operations.health?.notice}</p>{state.operations.health?.tasks.map((t:any)=><p key={t.name}>{t.name}: {t.interrupted?'interrupted':t.state}; last success: {t.last_succeeded_at?new Date(t.last_succeeded_at).toLocaleString():'not observed'}</p>)}<div className="testing-fields"><div><h3>Jobs</h3>{state.operations.jobs.map((v:any)=><p key={v.status}>{v.status}: {v.count}</p>)}</div><div><h3>Archive delivery</h3>{state.operations.archives.map((v:any)=><p key={v.status}>{v.status}: {v.count}</p>)}</div></div></section>}
+      {state?.operations&&<section className="panel operations-panel"><h2>Unattended operations</h2><p>{state.operations.notice}</p><p>Legacy pilot capacity: {state.operations.hosted.sharedMonthlyUsed}/{state.operations.hosted.limits.monthlyAssessments} monthly assessments; {state.operations.hosted.sharedActive}/{state.operations.hosted.limits.globalActive} active. Provider account quota has not been independently verified.</p><p>Hosted scheduling: {state.operations.capacity?.mode||'legacy'}. {state.operations.capacity?.mode==='fair'&&`Company allowance: ${state.operations.capacity.tenant.limits.monthlyStarts} starts/month, ${state.operations.capacity.tenant.limits.active} concurrent, ${state.operations.capacity.tenant.limits.queued} queued. Reserved starts: ${state.operations.capacity.tenant.reserved.starts}.`} Configuration does not establish measured cloud capacity.</p><p>Authenticated maintenance: {state.operations.maintenanceConfigured?'configured; successful execution still needs monitoring':'not configured; operator setup required'}.</p><p className="fineprint">{state.operations.health?.notice}</p>{state.operations.health?.tasks.map((t:any)=><p key={t.name}>{t.name}: {t.interrupted?'interrupted':t.state}; last success: {t.last_succeeded_at?new Date(t.last_succeeded_at).toLocaleString():'not observed'}</p>)}<div className="testing-fields"><div><h3>Jobs</h3>{state.operations.jobs.map((v:any)=><p key={v.status}>{v.status}: {v.count}</p>)}</div><div><h3>Archive delivery</h3>{state.operations.archives.map((v:any)=><p key={v.status}>{v.status}: {v.count}</p>)}</div></div></section>}
       <section className="panel operations-panel">
         <h2>Release policy</h2>
         <p>
@@ -367,6 +368,7 @@ export function AssuranceHub({
           recalculated at each release decision; stale reports, missing costs
           and expired evidence can block an already-enforced gate.
         </p>
+        <EnterpriseProfile root={root} owner={owner} demo={demo} onApplied={load}/>
         {policy && (
           <form
             onSubmit={(e) => {

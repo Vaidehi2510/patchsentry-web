@@ -1,0 +1,29 @@
+{
+  "patchsentry-offline-tests:launch": {
+    "Id": "sha256:49b576f02569e6f89a4c1a44f3a5448ea604d81fcf14be032f7c2ab672bb519f",
+    "RepoDigests": [
+      "patchsentry-offline-tests@sha256:49b576f02569e6f89a4c1a44f3a5448ea604d81fcf14be032f7c2ab672bb519f"
+    ],
+    "Architecture": "arm64",
+    "Os": "linux",
+    "Created": "2026-10-31T02:35:29.986469042Z"
+  },
+  "patchsentry-release-qa:launch": {
+    "Id": "sha256:18a4eac5b211f0c2aaa9c705ff9ec9875ec5608e17f61b4fea7938a1793da054",
+    "RepoDigests": [
+      "patchsentry-release-qa@sha256:18a4eac5b211f0c2aaa9c705ff9ec9875ec5608e17f61b4fea7938a1793da054"
+    ],
+    "Architecture": "arm64",
+    "Os": "linux",
+    "Created": "2026-10-31T02:30:00.868440209Z"
+  },
+  "postgres:16-bookworm": {
+    "Id": "sha256:e8a07d2c7579b038938cdba6c539e580e5001caf9ea203d397b5cc83e76bd938",
+    "RepoDigests": [
+      "postgres@sha256:e8a07d2c7579b038938cdba6c539e580e5001caf9ea203d397b5cc83e76bd938"
+    ],
+    "Architecture": "arm64",
+    "Os": "linux",
+    "Created": "2026-10-28T01:34:19.430369901Z"
+  }
+}

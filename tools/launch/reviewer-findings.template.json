@@ -1,0 +1,10 @@
+{
+  "status":"awaiting-independent-reviewer",
+  "reviewer":{"name":null,"organization":null,"independenceStatement":null},
+  "authorizedScope":null,
+  "reviewedRevisions":{"website":null,"engine":null,"ledger":null},
+  "assessmentDate":null,
+  "findings":[],
+  "findingSchema":{"id":"","severity":"","affectedRevision":"","environment":"","reproduction":[],"expected":"","actual":"","evidenceSha256":[],"owner":"","remediationRevision":null,"externalRetest":null},
+  "notice":"Template only. No independent assessment or findings are asserted."
+}

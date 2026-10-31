@@ -1,3 +1,4 @@
+import {migrateCapacity} from './capacity-schema';
 import {migrateAssurance} from './assurance-schema';
 import {migrateEnterprise} from "./enterprise-schema";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
@@ -208,5 +209,6 @@ export async function migrateDatabase(database: Database, config: AuthConfig) {
  await database.query("CREATE TABLE IF NOT EXISTS qa_weekly_reports(id text PRIMARY KEY,project_id text NOT NULL REFERENCES projects(id) ON DELETE CASCADE,period_start timestamptz NOT NULL,payload jsonb NOT NULL,email_status text NOT NULL DEFAULT 'disabled',email_claimed_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(project_id,period_start))");
 
  await migrateAssurance(database);
+ await migrateCapacity(database);
 
 }

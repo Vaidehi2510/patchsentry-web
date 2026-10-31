@@ -1,0 +1,17 @@
+{
+  "Version":"2012-10-17",
+  "Statement":[{
+    "Sid":"SelectedPatchsentryDevicePilotOnly",
+    "Effect":"Allow",
+    "Action":["devicefarm:GetProject","devicefarm:GetDevicePool","devicefarm:GetDevicePoolCompatibility","devicefarm:GetUpload","devicefarm:ScheduleRun","devicefarm:GetRun","devicefarm:ListJobs","devicefarm:ListArtifacts","devicefarm:StopRun"],
+    "Resource":[
+      "arn:aws:devicefarm:us-west-2:ACCOUNT_ID:project:PROJECT_UUID",
+      "arn:aws:devicefarm:us-west-2:ACCOUNT_ID:devicepool:PROJECT_UUID/POOL_UUID",
+      "arn:aws:devicefarm:us-west-2:ACCOUNT_ID:upload:PROJECT_UUID/APP_UPLOAD_UUID",
+      "arn:aws:devicefarm:us-west-2:ACCOUNT_ID:upload:PROJECT_UUID/TEST_UPLOAD_UUID",
+      "arn:aws:devicefarm:us-west-2:ACCOUNT_ID:run:PROJECT_UUID/*",
+      "arn:aws:devicefarm:us-west-2:ACCOUNT_ID:job:PROJECT_UUID/*"
+    ],
+    "Condition":{"StringEquals":{"aws:RequestedRegion":"us-west-2"}}
+  }]
+}

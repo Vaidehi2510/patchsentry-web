@@ -1,0 +1,17 @@
+{
+  "classification": "Existing hosted Ledger implementation exercised in a synthetic local project, not a production customer or deployed Java receipt",
+  "projectId": "8b199a7f-9bfa-48d4-a411-6fe54578f30a",
+  "entryId": "085259ea-3b50-49be-8ca1-5a320b821d44",
+  "eventType": "internal-launch-validation",
+  "payloadDigest": "ba96181e63881018ba06c2475414aa072d001dee4801a760d5124165dfe30be1",
+  "sequence": "2",
+  "entryHash": "c798b337f61c1b5fc49530040e0bde255e86b05f3145758f5b83ad96099f0343",
+  "verifiedChain": {
+    "valid": true,
+    "complete": true,
+    "verifiedEntries": 2,
+    "headHash": "c798b337f61c1b5fc49530040e0bde255e86b05f3145758f5b83ad96099f0343",
+    "notice": "Retain this head receipt separately to detect wholesale replacement."
+  },
+  "artifactCount": 18
+}
