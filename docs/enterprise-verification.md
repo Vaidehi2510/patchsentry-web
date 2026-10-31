@@ -265,3 +265,10 @@ internal validation event, never a passing assessment, company qualification,
 production customer record or deployed Java acknowledgment. Retain the receipt
 outside the database. Source manifests and artifact hashes allow a reviewer to
 identify the exact measured candidate rather than infer provenance from a label.
+
+Website main code `fdbe16c` passed [GitHub verification](https://github.com/Vaidehi2510/patchsentry-web/actions/runs/41162940145)
+and the existing Vercel production build (additive migration completed). The
+production alias is live and public home/docs/signup returned200. Unauthenticated
+capacity/operator/drain/profile/history probes returned401. Deployment identity
+and prior rollback target are in `enterprise-evidence.json` / launch checkpoint.
+These are health/authentication probes, not a real-company production qualification.

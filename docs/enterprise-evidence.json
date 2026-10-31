@@ -9,7 +9,7 @@
     "java": "6a15e90"
   },
   "implementation": {
-    "website": "See release commit and deployment receipt in launch checkpoint",
+    "website": "fdbe16c61052ad7bd683e365bc9c78ac11b21538",
     "engine": "5c1114bdbdd5cb89ed2c1d78580d27b8da1e0c9b",
     "java": "6a15e90 (unchanged)",
     "engineCi": "https://github.com/Vaidehi2510/QA-testbot/actions/runs/41162184547",
@@ -158,8 +158,58 @@
   ],
   "readinessDecision": "controlled advisory pilot; no general enterprise QA replacement claim",
   "deployment": {
-    "state": "pending final release publication; previous deployment retained in previousMilestoneVerification",
-    "productionUrl": "https://patchsentry.vercel.app"
+    "productionCodeRevision": "fdbe16c61052ad7bd683e365bc9c78ac11b21538",
+    "productionUrl": "https://patchsentry.vercel.app",
+    "deployment": "https://patchsentry-68bxo3s3z-vaidehipandya-3024s-projects.vercel.app",
+    "id": "dpl_86JUmseQqAB59hdwS4JB3SRfbsRr",
+    "state": "READY",
+    "codeCi": "passed",
+    "codeCiUrl": "https://github.com/Vaidehi2510/patchsentry-web/actions/runs/41162940145",
+    "publicAndUnauthenticatedChecks": [
+      {
+        "path": "/",
+        "method": "GET",
+        "status": 200
+      },
+      {
+        "path": "/docs",
+        "method": "GET",
+        "status": 200
+      },
+      {
+        "path": "/signup",
+        "method": "GET",
+        "status": 200
+      },
+      {
+        "path": "/api/internal/capacity",
+        "method": "GET",
+        "status": 401
+      },
+      {
+        "path": "/api/internal/operations",
+        "method": "GET",
+        "status": 401
+      },
+      {
+        "path": "/api/internal/hosted/drain",
+        "method": "POST",
+        "status": 401
+      },
+      {
+        "path": "/api/projects/00000000-0000-4000-8000-000000000000/assurance/enterprise",
+        "method": "GET",
+        "status": 401
+      },
+      {
+        "path": "/api/projects/00000000-0000-4000-8000-000000000000/ledger/history",
+        "method": "GET",
+        "status": 401
+      }
+    ],
+    "productionCustomerDataTesting": false,
+    "productionProjectsOptedIn": false,
+    "paidQaStarted": false
   },
   "previousMilestoneVerification": {
     "baseline": {
