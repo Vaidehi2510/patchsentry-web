@@ -686,7 +686,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
           onClick={() => !busy && setCreating(false)}
         >
           <section
-            className="modal"
+            className="modal project-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="project-title"
@@ -703,49 +703,48 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             <span className="eyebrow">YOUR NEXT PRODUCT</span>
             <h2 id="project-title">Create a project</h2>
             <p>
-              Create a Patchsentry workspace for an authorized repository. This makes you its Patchsentry owner, not a GitHub repository owner. A repository administrator must separately authorize the read-only runner connection.
+              Create a QA workspace for a personal or team repository.
             </p>
-            <p className="fineprint">Creating a project requires a verified MFA session. If you used a remembered browser, <Link href="/app?tab=account">open My account</Link> and choose “Verify MFA for account changes” first.</p>
+            <p className="fineprint">Verified MFA is required. <Link href="/app?tab=account">Verify MFA in My account</Link> if you used a remembered browser.</p>
             <form onSubmit={create}>
-              <label>
-                Project name
-                <input
-                  name="name"
-                  required
-                  maxLength={80}
-                  placeholder="My storefront"
-                  autoFocus
-                />
-              </label>
-              <label>
-                GitHub repository
-                <input
-                  name="repository"
-                  required
-                  pattern="(?:[A-Za-z0-9_.]|-)+/(?:[A-Za-z0-9_.]|-)+"
-                  maxLength={201}
-                  placeholder="your-username/your-project"
-                />
-              </label>
-              <p className="fineprint">
-                Personal repositories and organization repositories both work. Public or private, you choose the access on your runner.
-              </p>
-              <p className="fineprint">
-                <LockKeyhole size={14} /> This does not grant GitHub access or
-                change repository permissions.
-              </p>
-              {error && (
-                <p className="form-error" role="alert">
-                  {error}
-                </p>
-              )}
-              <button
-                className="button button-primary auth-submit"
-                disabled={busy}
-              >
-                {busy ? "Creating…" : "Create project"}
-                <ArrowRight size={16} />
-              </button>
+              <div className="project-form-fields">
+                <label>
+                  Project name
+                  <input
+                    name="name"
+                    required
+                    maxLength={80}
+                    placeholder="My storefront"
+                    autoFocus
+                  />
+                </label>
+                <label>
+                  GitHub repository
+                  <input
+                    name="repository"
+                    required
+                    pattern="(?:[A-Za-z0-9_.]|-)+/(?:[A-Za-z0-9_.]|-)+"
+                    maxLength={201}
+                    placeholder="your-username/your-project"
+                  />
+                </label>
+                <p className="fineprint"><LockKeyhole size={14} /> Public or private repositories. Creating a workspace does not grant GitHub access.</p>
+                <details className="project-access-help"><summary>Repository access and ownership</summary><p>You become the Patchsentry workspace owner. A repository administrator must separately authorize its read-only GitHub connection. Repository permissions stay unchanged.</p></details>
+                {error && (
+                  <p className="form-error" role="alert">
+                    {error}
+                  </p>
+                )}
+              </div>
+              <div className="project-form-actions">
+                <button
+                  className="button button-primary auth-submit"
+                  disabled={busy}
+                >
+                  {busy ? "Creating…" : "Create project"}
+                  <ArrowRight size={16} />
+                </button>
+              </div>
             </form>
           </section>
         </div>

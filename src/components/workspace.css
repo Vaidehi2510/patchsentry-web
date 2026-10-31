@@ -2543,3 +2543,47 @@ html[data-motion=on] .auth-story:before { animation: ambient-drift 14s ease-in-o
 .quality-hub .code-block code{white-space:inherit;overflow-wrap:anywhere;word-break:break-word}
 @media(max-width:760px){.workspace .app-topbar>div:first-child{min-width:0;flex:1}.workspace .app-topbar strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.workspace .app-topbar>div:last-child{flex-shrink:0}}
 @media(max-width:380px){.workspace .app-topbar .topbar-muted{display:none}}
+
+/* Keep project fields scrollable while the primary action stays in view. */
+.workspace .modal-backdrop {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+.workspace .modal.project-modal {
+  width: min(560px, 100%);
+  min-width: 0;
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.workspace .project-modal > p { margin: 0 0 12px; }
+.workspace .project-modal form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 0;
+  margin-top: 12px;
+}
+.workspace .project-form-fields {
+  display: grid;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 3px;
+  margin: -3px;
+}
+.workspace .project-form-actions { flex-shrink: 0; padding-top: 20px; }
+.workspace .project-form-actions .button { width: 100%; }
+.workspace .project-access-help { color: var(--muted); font-size: 15px; line-height: 1.6; }
+.workspace .project-access-help summary { cursor: pointer; color: var(--ink); }
+.workspace .project-access-help p { margin: 10px 0 0; }
+@media (max-height: 500px) {
+  .workspace .modal.project-modal { padding: 20px 24px; }
+  .workspace .project-modal .eyebrow { display: none; }
+  .workspace .project-modal h2 { margin: 0 30px 8px 0; }
+  .workspace .project-modal > p:not(.fineprint) { display: none; }
+  .workspace .project-form-actions { padding-top: 12px; }
+}
