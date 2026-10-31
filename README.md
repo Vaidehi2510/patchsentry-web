@@ -174,3 +174,7 @@ See the public [architecture guide](https://patchsentry.vercel.app/architecture)
 See [hosted QA](docs/hosted.md) for the SaaS flow, supported scope, operational limits and deployment verification. Local model and private-network connectors remain optional.
 
 Automatic QA, scheduled coverage reports, optional hosted Slack/email delivery and signed CI release gating are documented in [automation setup](docs/automation.md).
+
+## License
+
+Licensed under the [MIT License](LICENSE). Copyright (c) 2026 Vaidehi Pandya.
