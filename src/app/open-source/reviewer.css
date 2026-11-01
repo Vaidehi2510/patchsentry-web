@@ -1,0 +1,51 @@
+.reviewer-page { max-width: 1100px; padding-bottom: 100px; }
+.reviewer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 18px; }
+.reviewer-actions a:not(.button), .reviewer-page p a, .reviewer-report a, .reviewer-split a, .reviewer-repos a { color: #5943a6; text-decoration: underline; text-underline-offset: 4px; }
+.reviewer-license { display: inline-flex; align-items: center; gap: 8px; color: #526044; font-size: 16px; }
+.reviewer-nav { display: flex; flex-wrap: wrap; gap: 12px 28px; padding: 30px 0; margin-top: 20px; border-bottom: 1px solid #dedfd5; }
+.reviewer-nav a { font-size: 17px; padding: 6px 0; color: #4d5145; }
+.reviewer-section { padding: 55px 0; border-bottom: 1px solid #dedfd5; scroll-margin-top: 100px; }
+.reviewer-section h2 { font-size: clamp(28px, 4vw, 42px); line-height: 1.2; letter-spacing: -1px; margin: 18px 0 20px; font-weight: 550; }
+.reviewer-section h3 { font-size: 22px; line-height: 1.4; margin: 12px 0; }
+.reviewer-section p, .reviewer-section li, .reviewer-section dd { font-size: 18px; line-height: 1.8; color: #50564a; }
+.reviewer-section p { margin: 16px 0; }
+.reviewer-section ol { padding-left: 24px; }
+.reviewer-section li { margin-bottom: 9px; }
+.reviewer-section code { font-size: .92em; overflow-wrap: anywhere; }
+.reviewer-code { border: 1px solid #dedde7; border-radius: 12px; background: #242820; color: #f6f6ef; padding: 24px; overflow-x: auto; font-size: 16px; line-height: 1.9; margin: 26px 0; }
+.reviewer-code code { white-space: pre; }
+.reviewer-video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #242820; border: 1px solid #dedfd5; border-radius: 14px; margin-top: 25px; }
+.reviewer-split { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 30px; margin: 28px 0; }
+.reviewer-split article { border-radius: 14px; border: 1px solid #dedfd5; padding: 26px; background: #fff; min-width: 0; }
+.reviewer-small { font-size: 16px !important; line-height: 1.8 !important; }
+.reviewer-report { border: 1px solid #ddd6eb; border-radius: 14px; overflow: hidden; background: #fff; margin-top: 28px; }
+.reviewer-report header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; padding: 22px 26px; background: #eeebf7; }
+.reviewer-report header span { display: flex; align-items: center; gap: 9px; font-size: 17px; }
+.reviewer-report header strong { font-size: 16px; background: #f9e9e5; color: #7b3426; padding: 7px 12px; border-radius: 20px; }
+.reviewer-report dl { padding: 8px 26px; margin: 0; }
+.reviewer-report dl > div { padding: 18px 0; display: grid; grid-template-columns: 180px minmax(0,1fr); gap: 20px; border-bottom: 1px solid #ecece5; }
+.reviewer-report dt { font-size: 16px; font-weight: 600; line-height: 1.8; }
+.reviewer-report dd { margin: 0; }
+.reviewer-report footer { padding: 24px 26px; display: flex; flex-wrap: wrap; gap: 14px 28px; font-size: 17px; }
+.reviewer-table-wrap { overflow-x: auto; margin-top: 25px; }
+.reviewer-page table { width: 100%; border-collapse: collapse; text-align: left; font-size: 16px; line-height: 1.8; }
+.reviewer-page caption { text-align: left; font-weight: 600; padding: 0 0 16px; }
+.reviewer-page th, .reviewer-page td { padding: 18px; border: 1px solid #dedfd5; vertical-align: top; }
+.reviewer-page thead { background: #eeebf7; }
+.reviewer-page tbody th { width: 22%; background: #f3f3eb; }
+.reviewer-repos { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 22px; margin: 28px 0; }
+.reviewer-repos article { padding: 25px; border: 1px solid #dedfd5; border-radius: 14px; min-width: 0; }
+.reviewer-repos a { overflow-wrap: anywhere; font-size: 16px; }
+.reviewer-page a:focus-visible, .reviewer-page video:focus-visible, .reviewer-page [tabindex="0"]:focus-visible { outline: 3px solid #7056bd; outline-offset: 5px; }
+@media (max-width: 760px) {
+ .reviewer-split, .reviewer-repos { grid-template-columns: 1fr; }
+ .reviewer-actions { align-items: stretch; }
+ .reviewer-actions .button { width: 100%; justify-content: center; }
+ .reviewer-section { padding: 38px 0; scroll-margin-top: 85px; }
+ .reviewer-section p, .reviewer-section li, .reviewer-section dd { font-size: 17px; }
+ .reviewer-report dl > div { grid-template-columns: 1fr; gap: 6px; }
+ .reviewer-report dl, .reviewer-report header, .reviewer-report footer { padding-left: 20px; padding-right: 20px; }
+ .reviewer-code { padding: 18px; font-size: 14px; }
+ .reviewer-page th, .reviewer-page td { padding: 12px; min-width: 140px; }
+ .reviewer-page tbody th { min-width: 125px; }
+}

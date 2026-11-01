@@ -1,0 +1,49 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:12.000
+Patchsentry helps teams inspect software changes using configured tests
+and traceable evidence. This guide is public and the source is MIT
+licensed.
+
+2
+00:00:12.000 --> 00:00:28.000
+Start with Node.js 24 and the no-key engine demo. Install public
+dependencies once. The demonstration needs no account, API key, Docker
+or live integration.
+
+3
+00:00:28.000 --> 00:00:44.000
+These are captured real Node assertions. The healthy fixture passes four
+tests. A seeded strict comparison charges five dollars at exactly one
+hundred dollars, where the expected fee is zero.
+
+4
+00:00:44.000 --> 00:01:00.000
+The dashboard you see now is an illustrative sample workspace. Its
+scores and findings show the interface; they are not executed customer
+assessments.
+
+5
+00:01:00.000 --> 00:01:16.000
+This sample report shows how failures and suggested fixes are presented.
+Required-check scores are not code coverage. AI findings remain
+suggestions that need review.
+
+6
+00:01:16.000 --> 00:01:32.000
+Inspect the actual verification records and limitations. The initial
+own-release challenge detected two of four seeded faults. Regressions
+later caught both misses; that is not a new held-out accuracy result.
+
+7
+00:01:32.000 --> 00:01:48.000
+The website coordinates work and keeps the hosted assessment Ledger. The
+engine executes configured checks. The Java archive is optional and not
+deployed by this project. Product source stays read-only.
+
+8
+00:01:48.000 --> 00:02:12.520
+Contribute documentation, reproducibility checks, accessibility feedback
+or a focused test. Existing external work is credited. Community
+participation and staffing savings are never manufactured.

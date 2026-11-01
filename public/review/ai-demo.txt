@@ -1,0 +1,201 @@
+Captured synthetic demonstration. Real assertions; external integrations are MOCKED.
+Host: Node26.3.1. The same demos also passed offline on Node24.22.2.
+Temporary paths normalized. This is not a live AI/customer result.
+
+
+> qa-signoff-bot@1.5.0 demo:ai
+> node src/ai/demo.js
+
+AI QA TEAM DEMO — OpenRouter responses are MOCKED; fixture tests execute for real. No network or credentials.
+
+[MOCK catalog] mock/qa-specialist
+[MOCK agents] Planning roles: planner, code-review, security, ui-ux
+[MOCK agents] Proposed findings: Exact-threshold orders are charged shipping; Checkout input lacks an accessible name
+[MOCK agents] Candidate tests: 1 (not executed or installed)
+[REAL executor] 1 test(s) failed (exit 1).
+[REAL controller] Duplicate review deduplicated; AI suggestions never override the failed test.
+[MOCK agents] Final roles: code-review, triage
+[MOCK model usage] 12 requests, $0; bounded tool reads and budget checkpoints verified.
+
+[REPORT PREVIEW]
+# QA report: example/shop #201
+
+**PR:** [Review checkout with the AI QA team](https://github.com/example/shop/pull/201)
+**Author:** demo-author
+**Tested revision:** eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+**Environment:** synthetic-ai-demo
+**Run ID / attempt:** b54300b5a6f0fb2ffb86204b6b49e9f9f8a5092a9fbddc4c87c1fb313e873744 / 1
+**GitHub Actions run / attempt:** 201 / 1
+**Created:** 2026-10-31T20:42:14.191Z
+**QA outcome:** failed
+**Check counts:** passed: 1, failed: 1, skipped: 0, blocked: 0, execution_error: 0, awaiting_human: 1
+**Tests: 4 total, 3 passed, 1 failed, 0 skipped, 0 cancelled.**
+**Report upload:** pending
+**Test evidence:** [https://github.com/example/bot/actions/runs/201](https://github.com/example/bot/actions/runs/201)
+
+## Affected areas
+- General
+
+## Affected user journeys
+- None recorded.
+
+## QA plan
+
+| Check ID | Reason / supporting requirement | Expected result | Execution method | Required |
+| --- | --- | --- | --- | --- |
+| runner-node-tests | Essential baseline suite is required for every revision.; ["calculator.js","Checkout.jsx","PR description","calculator.test.js"] | The configured suite completes with every required assertion passing. | automated | Yes |
+| ai-team-review | Configured AI planning and final review must finish; AI findings are separate from test evidence.; ["qa-config.json:ai"] | Configured reviewers finish at this revision, with cited findings and explicit coverage limitations. | analysis | Yes |
+| ai-finding-2e42947e06866a36 | AI high finding needs verification: Exact-threshold orders are charged shipping; ["calculator.js","calculator.js"] | An authorized reviewer determines whether the finding is addressed or a documented false positive. | human | Yes |
+
+## Executed checks and results
+
+| Check ID | Status | Details | Evidence |
+| --- | --- | --- | --- |
+| runner-node-tests | failed | 1 test(s) failed (exit 1). | logs/b461adbff807aeafbe13064d.log; [run artifacts](https://github.com/example/bot/actions/runs/201) |
+
+## Failure evidence
+Full logs: [open the GitHub Actions run and its artifacts](https://github.com/example/bot/actions/runs/201).
+
+### runner-node-tests (failed)
+
+1 test(s) failed (exit 1).
+
+Artifact path: `logs/b461adbff807aeafbe13064d.log`.
+
+Log excerpt (test output; truncated when necessary):
+
+    TAP version 13
+    # Subtest: orders at the documented $100 threshold ship free
+    not ok 1 - orders at the documented $100 threshold ship free
+      ---
+      duration_ms: 1.093083
+      type: 'test'
+      location: '<temporary-path>'
+      failureType: 'testCodeFailure'
+      error: |-
+        Expected values to be strictly equal:
+        
+        5 !== 0
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 0
+      actual: 5
+      operator: 'strictEqual'
+      stack: |-
+        TestContext.<anonymous> (<temporary-path>
+        Test.runInAsyncScope (node:async_hooks:226:14)
+        Test.run (node:internal/test_runner/test:1382:25)
+        Test.start (node:internal/test_runner/test:1242:17)
+        startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+
+Excerpt truncated; see the full log artifact.
+
+## Static-analysis findings
+- None recorded.
+
+## Skipped, blocked, or untested areas
+- ai-team-review: AI review passed; not an automated test
+- ai-finding-2e42947e06866a36: human decision (see below)
+
+## Human questions and decisions
+- ai-finding-2e42947e06866a36: Validate or reject this finding against the code and requirements: At amount=100 the strict comparison returns a $5 charge, contradicting the documented inclusive threshold. Suggested fix: Replace amount &gt; 100 with amount &gt;= 100 and retain the boundary regression test. Cite your evidence; an AI suggestion is not a confirmed defect.
+
+| Check ID | Decision | Responder | Explanation | Timestamp | Revision | Applicability |
+| --- | --- | --- | --- | --- | --- | --- |
+
+## Previous execution attempts
+No previous execution attempts recorded for this assessment.
+
+## AI QA team
+
+Model findings are proposals requiring evidence; actual test results determine automated outcomes.
+
+### Code inspection and test planning
+
+Status: completed · revision: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+Cost reported: 0 USD
+
+- planner · mock/qa-specialist · completed: [MOCK planner] Reviewed captured evidence at the supplied revision.
+- code-review · mock/qa-specialist · completed: [MOCK code-review] Reviewed captured evidence at the supplied revision.
+- security · mock/qa-specialist · completed: [MOCK security] Reviewed captured evidence at the supplied revision.
+- ui-ux · mock/qa-specialist · completed: [MOCK ui-ux] Reviewed captured evidence at the supplied revision.
+
+#### Findings and suggested fixes
+
+- **high — Exact-threshold orders are charged shipping** (calculator.js)
+  At amount=100 the strict comparison returns a $5 charge, contradicting the documented inclusive threshold.
+  Suggested fix: Replace amount &gt; 100 with amount &gt;= 100 and retain the boundary regression test.
+  Evidence: [{"file":"calculator.js","quote":"return amount &gt; 100 ? 0 : 5;"}]
+- **medium — Checkout input lacks an accessible name** (Checkout.jsx)
+  The amount input has no associated label or aria-label in the changed component. This is a source observation, not a browser audit.
+  Suggested fix: Add a visible label associated with the input id, then verify keyboard and screen-reader behavior.
+  Evidence: [{"file":"Checkout.jsx","quote":"&lt;input type=\"number\" /&gt;"}]
+
+#### Unresolved questions
+
+- None proposed.
+
+#### Candidate tests — assertions require validation
+
+- Keep the exact free-shipping boundary covered · test/shipping-boundary.test.js: An order of exactly $100 has zero shipping cost.
+  Requirement: PR description
+  Candidate source (not executed or installed):
+
+```text
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { shippingCost } = require('../calculator');
+test('exact threshold ships free', () => assert.equal(shippingCost(100), 0));
+```
+
+
+#### Review limits
+
+- UI/UX review is limited to source; no approved screenshots for this revision were available. Browser interactions, layout, accessibility behavior, and visual regressions were not executed by the model.
+- Secret redaction is best effort; source upload requires repository-owner approval through trusted AI configuration.
+- MOCK model response; not a live model evaluation.
+
+### Final review and failure investigation
+
+Status: completed · revision: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+Cost reported: 0 USD
+
+- code-review · mock/qa-specialist · completed: [MOCK code-review] Reviewed captured evidence at the supplied revision.
+- triage · mock/qa-specialist · completed: [MOCK triage] Reviewed captured evidence at the supplied revision.
+
+#### Findings and suggested fixes
+
+- **high — Exact-threshold orders are charged shipping** (calculator.js)
+  At amount=100 the strict comparison returns a $5 charge, contradicting the documented inclusive threshold.
+  Suggested fix: Replace amount &gt; 100 with amount &gt;= 100 and retain the boundary regression test.
+  Evidence: [{"file":"calculator.js","quote":"return amount &gt; 100 ? 0 : 5;"}]
+- **high — Exact-threshold orders are charged shipping** (calculator.js)
+  At amount=100 the strict comparison returns a $5 charge, contradicting the documented inclusive threshold.
+  Suggested fix: Replace amount &gt; 100 with amount &gt;= 100 and retain the boundary regression test.
+  Evidence: [{"file":"calculator.js","quote":"return amount &gt; 100 ? 0 : 5;"}]
+
+#### Unresolved questions
+
+- None proposed.
+
+#### Candidate tests — assertions require validation
+
+- None proposed.
+
+#### Review limits
+
+- UI/UX review is limited to source; no approved screenshots for this revision were available. Browser interactions, layout, accessibility behavior, and visual regressions were not executed by the model.
+- Secret redaction is best effort; source upload requires repository-owner approval through trusted AI configuration.
+- MOCK model response; not a live model evaluation.
+
+
+## Remaining limitations
+- No feature rule matched; only configured baseline and path-selected suites are planned.
+- Required check remains failed: runner-node-tests
+- Required check remains awaiting_human: ai-finding-2e42947e06866a36
+
+Outcome is calculated from structured results and applicable decisions. Report availability is independent of QA outcome.
+
+
+AI demo passed. All temporary artifacts removed; no external writes or model charges.

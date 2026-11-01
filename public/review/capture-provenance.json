@@ -1,0 +1,129 @@
+{
+  "sourceHead": "3f37c2f50a4d43f0b15d1c7c775c17c04b1a1458",
+  "hostNode": "v26.3.1",
+  "scope": "Trusted synthetic fixture; real local Node test processes; GitHub, Slack, Drive and model integrations are mocked. Existing demo forbids fetch and cleans temporary source copies.",
+  "originalFixtureUnchanged": true,
+  "trackedDemoAndRendererUnchanged": true,
+  "source": [
+    {
+      "path": "src/demo.js",
+      "sha256": "f6d172ae2d33c329b0d1435a3227794fafa6cff337b89957aea3b471006a7dad"
+    },
+    {
+      "path": "src/report.js",
+      "sha256": "5b5bcfdd3c88a07d94aab9d0cf73134aa2571dd68c4f95b07115a8e19615d18d"
+    }
+  ],
+  "fixture": [
+    {
+      "path": "fixtures/tiny-app/calculator.js",
+      "mode": 33188,
+      "sha256": "4744169cfaf2468292c426785c629e3d0b8b9a4a2dd81780bb919bc599599e77"
+    },
+    {
+      "path": "fixtures/tiny-app/calculator.test.js",
+      "mode": 33188,
+      "sha256": "89912950a7cdae1349e830f1f8ec75d43c812ac927e18477e4082f8f8ebde788"
+    },
+    {
+      "path": "fixtures/tiny-app/package.json",
+      "mode": 33188,
+      "sha256": "841ffc2588cfdba0785a6ae4a1ce67796a86b1d2175a6d663cfa21a215c156bd"
+    }
+  ],
+  "outcome": {
+    "status": "failed",
+    "counts": {
+      "passed": 0,
+      "failed": 1,
+      "skipped": 0,
+      "blocked": 0,
+      "execution_error": 0,
+      "awaiting_human": 0
+    },
+    "automatedPassed": false,
+    "pending": [
+      {
+        "required": true,
+        "area": "General",
+        "id": "runner-node-tests",
+        "method": "automated",
+        "runner": "node-tests",
+        "reason": "Essential baseline suite is required for every revision.",
+        "expected": "Orders >=100 ship free; smaller orders cost $5; invalid amounts reject.",
+        "kind": "baseline",
+        "support": [
+          "calculator.js",
+          "PR description",
+          "calculator.test.js"
+        ],
+        "status": "failed"
+      }
+    ],
+    "checkResults": [
+      {
+        "checkId": "runner-node-tests",
+        "status": "failed",
+        "source": {
+          "checkId": "runner-node-tests",
+          "status": "failed",
+          "evidence": [
+            {
+              "type": "log",
+              "path": "logs/b461adbff807aeafbe13064d.log",
+              "excerpt": "TAP version 13\n# Subtest: orders at the documented $100 threshold ship free\nnot ok 1 - orders at the documented $100 threshold ship free\n  ---\n  duration_ms: 1.000875\n  type: 'test'\n  location: '/private/var/folders/hs/c7jxt11x4v5gjsvvlkvw_34w0000gr/T/qa-bot-demo-f7nWUZ/broken/calculator.test.js:5:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    5 !== 0\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 0\n  actual: 5\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (/private/var/folders/hs/c7jxt11x4v5gjsvvlkvw_34w0000gr/T/qa-bot-demo-f7nWUZ/broken/calculator.test.js:5:72)\n    Test.runInAsyncScope (node:async_hooks:226:14)\n    Test.run (node:internal/test_runner/test:1382:25)\n    Test.start (node:internal/test_runner/test:1242:17)\n    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)\n  ...\n# Subtest: orders below $100 cost $5 to ship\nok 2 - orders below $100 cost $5 to ship\n  ---\n  duration_ms: 0.061667\n  type: 'test'\n  ...\n# Subtest: orders above $100 ship free\nok 3 - orders above $100 ship free\n  ---\n  duration_ms: 0.038\n  type: 'test'\n  ...\n# Subtest: negative and nonfinite amounts are rejected\nok 4 - negative and nonfinite amounts are rejected\n  ---\n  duration_ms: 0.13975\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 3\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 65.659583\n"
+            }
+          ],
+          "details": "1 test(s) failed (exit 1).",
+          "durationMs": 124,
+          "counts": {
+            "tests": 4,
+            "passed": 3,
+            "failed": 1,
+            "skipped": 0,
+            "cancelled": 0
+          }
+        }
+      }
+    ]
+  },
+  "counts": [
+    {
+      "checkId": "runner-node-tests",
+      "status": "failed",
+      "counts": {
+        "tests": 4,
+        "passed": 3,
+        "failed": 1,
+        "skipped": 0,
+        "cancelled": 0
+      }
+    }
+  ],
+  "excerpt": "not ok 1 - orders at the documented $100 threshold ship free\n  error: |-\n  expected: 0\n  actual: 5",
+  "sourceFilesMatchHead": true,
+  "credentialPatternScan": "No common live credential/key patterns detected; all integration operations come from the existing mocked demo",
+  "originalCaptureDigests": [
+    {
+      "path": "award-failed-run.json",
+      "sha256": "c17206400e01f6bbc62c167c790fc7d264f5014f6447cb23bbc5e21eed015498"
+    },
+    {
+      "path": "award-failed-report.md",
+      "sha256": "9326359ec6a6ee14ca340a5d7d617b756928c68ebc72b810d754c0ca2c38e022"
+    }
+  ],
+  "publication": {
+    "normalization": "Published report adds an explanatory heading and normalizes temporary paths; original capture digests are retained separately and are not the hashes of this annotated derivative.",
+    "artifacts": [
+      {
+        "path": "shipping-defect-report.md",
+        "sha256": "9b032fbc9c31809a78252283f8cf6571346588f4ef132f7ac2d1caf35030f127"
+      },
+      {
+        "path": "deterministic-demo.txt",
+        "sha256": "55c6777bc1d58e2d46f34c4b2d87ded30382ad151b1ba7b519f512ffeeb32f57"
+      }
+    ]
+  }
+}

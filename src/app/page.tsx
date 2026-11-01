@@ -61,7 +61,7 @@ const steps = [
   {
     icon: GitBranch,
     title: "Connect your product",
-    text: "Give the engine read access to your repository. Run it alongside your product, with checks kept in the QA workspace.",
+    text: "Connect read-only source and an authorized disposable preview. Use managed workers or an explicitly enrolled private runner.",
   },
   {
     icon: Cpu,
@@ -71,7 +71,7 @@ const steps = [
   {
     icon: GitPullRequest,
     title: "Choose a change",
-    text: "Select a PR or committed revision. Review the exact change against configured tests and browser journeys.",
+    text: "Select a PR, CI build or release version. Review the exact source and build against configured tests and browser journeys.",
   },
   {
     icon: CheckCheck,
@@ -112,6 +112,7 @@ export default function HomePage() {
                 <Check size={13} /> Your choice of model
               </span>
             </div>
+            <Link href="/open-source" className="text-link hero-reviewer-link">Review the open-source project <ArrowUpRight size={16}/></Link>
             <div className="hero-little-note">
               <span className="note-line" />
               Built for builders. Backed by evidence.

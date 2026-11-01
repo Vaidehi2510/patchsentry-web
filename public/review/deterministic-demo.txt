@@ -1,0 +1,205 @@
+Captured synthetic demonstration. Real assertions; external integrations are MOCKED.
+Host: Node26.3.1. The same demos also passed offline on Node24.22.2.
+Temporary paths normalized. This is not a live AI/customer result.
+
+
+> qa-signoff-bot@1.5.0 demo
+> node src/demo.js
+
+QA bot demo: REAL isolated fixture processes; all GitHub, Slack, and Drive operations are MOCKED.
+
+1. Successful automated run, no routine human sign-off
+QA assessment example/shop#101 @ aaaaaaaaaaaa: 1 checks
+[MOCK GitHub] plan #101: runner-node-tests (automated)
+[MOCK GitHub] durable request 24881096a317
+[MOCK GitHub] revision aaaaaaaa status: blocked
+[MOCK GitHub] revision aaaaaaaa status: passed
+
+[MOCK Slack — no message sent]
+*QA result* — <https://github.com/example/shop/pull/101|#101 Document the free-shipping boundary>
+Repository: example/shop · revision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+PR author: author · merged by: Not recorded
+Environment: synthetic-fixture · run 24881096a317eac8be5809918663450354faf59bbbf248de7fec99968c78501f / attempt 1
+Outcome: passed
+Checks: 1 passed, 0 failed, 0 skipped, 0 blocked, 0 execution error, 0 awaiting human
+Tests: 4 total, 4 passed, 0 failed, 0 skipped, 0 cancelled.
+Google Drive: report upload pending
+Test evidence: <https://github.com/example/qa-bot/actions/runs/1|Open evidence>
+Required action: none; QA completed automatically.
+
+[MOCK Drive — no upload] example_shop/PR-101/run-24881096a317eac8be5809918663450354faf59bbbf248de7fec99968c78501f-attempt-1.md
+
+[MOCK Slack — no message sent]
+QA report available for example/shop#101 at aaaaaaaaaaaa: https://drive.google.com/file/d/MOCK-101/view
+
+
+2. Intentionally introduced defect: >=100 becomes >100
+QA assessment example/shop#102 @ bbbbbbbbbbbb: 1 checks
+[MOCK GitHub] plan #102: runner-node-tests (automated)
+[MOCK GitHub] durable request ad8ee01a28f3
+[MOCK GitHub] revision bbbbbbbb status: blocked
+[MOCK GitHub] revision bbbbbbbb status: failed
+
+[MOCK Slack — no message sent]
+*QA result* — <https://github.com/example/shop/pull/102|#102 Introduce a shipping-boundary defect>
+Repository: example/shop · revision: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+PR author: author · merged by: Not recorded
+Environment: synthetic-fixture · run ad8ee01a28f30a2177a2718a8b603f31439f42be465df5ffec79019a326c9ac8 / attempt 1
+Outcome: failed
+Checks: 0 passed, 1 failed, 0 skipped, 0 blocked, 0 execution error, 0 awaiting human
+Tests: 4 total, 3 passed, 1 failed, 0 skipped, 0 cancelled.
+runner-node-tests: failed — 1 test(s) failed (exit 1).
+Google Drive: report upload pending
+Test evidence: <https://github.com/example/qa-bot/actions/runs/2|Open evidence>
+Required action: investigate the recorded issues and rerun the affected checks after fixing or unblocking them.
+
+[MOCK Drive — no upload] example_shop/PR-102/run-ad8ee01a28f30a2177a2718a8b603f31439f42be465df5ffec79019a326c9ac8-attempt-1.md
+
+[MOCK Slack — no message sent]
+QA report available for example/shop#102 at bbbbbbbbbbbb: https://drive.google.com/file/d/MOCK-102/view
+
+[REAL failure evidence]
+not ok 1 - orders at the documented $100 threshold ship free
+  error: |-
+  expected: 0
+  actual: 5
+
+3. Targeted question while independent automated checks pass
+QA assessment example/shop#103 @ cccccccccccc: 2 checks
+[MOCK GitHub] plan #103: runner-node-tests (automated), requirements-clarification (human)
+[MOCK GitHub] durable request 5e3d123c9335
+
+[MOCK Slack — no message sent]
+*Human QA input needed* — <https://github.com/example/shop/pull/103|#103 Clarify the shipping requirement>
+<@UOWNERDEMO>
+Check: requirements-clarification · revision: cccccccccccccccccccccccccccccccccccccccc
+Needed: Resolve these acceptance criteria: PR description: Open question: should the $100 threshold include discounts?
+Why: The supplied requirements explicitly leave behavior unresolved.
+Routing: Verified GitHub-to-Slack mappings select responsible people.
+An authorized responder must leave this single-line comment on the PR, choosing pass or fail and replacing the explanation:
+`/qa-tested check:requirements-clarification revision:cccccccccccccccccccccccccccccccccccccccc result:pass reason:Your decision and supporting explanation`
+Use result:fail if the requirement or check is not satisfied. An acknowledgment does not resolve this check. Independent automated checks continue.
+
+[MOCK GitHub] revision cccccccc status: blocked
+[MOCK GitHub] revision cccccccc status: awaiting_human
+
+[MOCK Slack — no message sent]
+*QA result* — <https://github.com/example/shop/pull/103|#103 Clarify the shipping requirement>
+Repository: example/shop · revision: cccccccccccccccccccccccccccccccccccccccc
+PR author: author · merged by: Not recorded
+Environment: synthetic-fixture · run 5e3d123c933535669da2397e442a991058b9dc58f15b32e316148f4a7e1db3bc / attempt 1
+Automated checks passed; human QA review pending.
+Checks: 1 passed, 0 failed, 0 skipped, 0 blocked, 0 execution error, 1 awaiting human
+Tests: 4 total, 4 passed, 0 failed, 0 skipped, 0 cancelled.
+Google Drive: report upload pending
+Test evidence: <https://github.com/example/qa-bot/actions/runs/3|Open evidence>
+Required action: respond to the targeted GitHub questions for requirements-clarification. An acknowledgment is not a decision.
+
+[MOCK Drive — no upload] example_shop/PR-103/run-5e3d123c933535669da2397e442a991058b9dc58f15b32e316148f4a7e1db3bc-attempt-1.md
+
+[MOCK Slack — no message sent]
+QA report available for example/shop#103 at cccccccccccc: https://drive.google.com/file/d/MOCK-103/view
+
+[MOCK authorized GitHub response] /qa-tested check:requirements-clarification revision:cccccccccccccccccccccccccccccccccccccccc result:pass reason:The $100 threshold uses the post-discount subtotal; verified synthetic cases and accepted this requirement.
+[MOCK GitHub] revision cccccccc status: passed
+
+[MOCK Slack — no message sent]
+*QA result* — <https://github.com/example/shop/pull/103|#103 Clarify the shipping requirement>
+Repository: example/shop · revision: cccccccccccccccccccccccccccccccccccccccc
+PR author: author · merged by: Not recorded
+Environment: synthetic-fixture · run 5e3d123c933535669da2397e442a991058b9dc58f15b32e316148f4a7e1db3bc / attempt 1
+Outcome: passed
+Checks: 2 passed, 0 failed, 0 skipped, 0 blocked, 0 execution error, 0 awaiting human
+Tests: 4 total, 4 passed, 0 failed, 0 skipped, 0 cancelled.
+Google Drive: report upload pending
+Test evidence: <https://github.com/example/qa-bot/actions/runs/3|Open evidence>
+Required action: none; QA completed automatically.
+
+[MOCK Drive — no upload] example_shop/PR-103/run-5e3d123c933535669da2397e442a991058b9dc58f15b32e316148f4a7e1db3bc-attempt-1.md
+
+[MOCK Slack — no message sent]
+QA report available for example/shop#103 at cccccccccccc: https://drive.google.com/file/d/MOCK-103/view
+
+
+4. Google Drive report preview
+
+# QA report: example/shop #103
+
+**PR:** [Clarify the shipping requirement](https://github.com/example/shop/pull/103)
+**Author:** author
+**Tested revision:** cccccccccccccccccccccccccccccccccccccccc
+**Environment:** synthetic-fixture
+**Run ID / attempt:** 5e3d123c933535669da2397e442a991058b9dc58f15b32e316148f4a7e1db3bc / 1
+**GitHub Actions run / attempt:** 3 / 1
+**Created:** 2026-10-31T20:42:14.453Z
+**QA outcome:** passed
+**Check counts:** passed: 2, failed: 0, skipped: 0, blocked: 0, execution_error: 0, awaiting_human: 0
+**Tests: 4 total, 4 passed, 0 failed, 0 skipped, 0 cancelled.**
+**Report upload:** uploaded
+**Test evidence:** [https://github.com/example/qa-bot/actions/runs/3](https://github.com/example/qa-bot/actions/runs/3)
+
+## Affected areas
+- General
+
+## Affected user journeys
+- None recorded.
+
+## QA plan
+
+| Check ID | Reason / supporting requirement | Expected result | Execution method | Required |
+| --- | --- | --- | --- | --- |
+| runner-node-tests | Essential baseline suite is required for every revision.; ["calculator.js","PR description","calculator.test.js"] | Orders &gt;=100 ship free; smaller orders cost $5; invalid amounts reject. | automated | Yes |
+| requirements-clarification | The supplied requirements explicitly leave behavior unresolved.; ["PR description"] | An authorized owner supplies the intended result and validates it against the revision. | human | Yes |
+
+## Executed checks and results
+
+| Check ID | Status | Details | Evidence |
+| --- | --- | --- | --- |
+| runner-node-tests | passed | 4 test(s) passed. | logs/b461adbff807aeafbe13064d.log; [run artifacts](https://github.com/example/qa-bot/actions/runs/3) |
+
+## Failure evidence
+No automated failures or execution errors recorded.
+
+## Static-analysis findings
+- None recorded.
+
+## Skipped, blocked, or untested areas
+- requirements-clarification: human decision (see below)
+
+## Human questions and decisions
+- requirements-clarification: Resolve these acceptance criteria: PR description: Open question: should the $100 threshold include discounts?
+
+| Check ID | Decision | Responder | Explanation | Timestamp | Revision | Applicability |
+| --- | --- | --- | --- | --- | --- | --- |
+| requirements-clarification | pass | feature-owner | The $100 threshold uses the post-discount subtotal; verified synthetic cases and accepted this requirement. | 2026-10-31T20:42:15.591Z | cccccccccccccccccccccccccccccccccccccccc | Current revision |
+
+## Previous execution attempts
+No previous execution attempts recorded for this assessment.
+
+## Remaining limitations
+- No feature rule matched; only configured baseline and path-selected suites are planned.
+
+Outcome is calculated from structured results and applicable decisions. Report availability is independent of QA outcome.
+
+
+5. New commit with identical filenames invalidates prior QA
+QA assessment example/shop#103 @ dddddddddddd: 2 checks
+[MOCK Drive — no upload] example_shop/PR-103/run-5e3d123c933535669da2397e442a991058b9dc58f15b32e316148f4a7e1db3bc-attempt-1.md
+[MOCK GitHub] plan #103: runner-node-tests (automated), requirements-clarification (human)
+[MOCK GitHub] durable request d4d2dda50dc9
+
+[MOCK Slack — no message sent]
+*Human QA input needed* — <https://github.com/example/shop/pull/103|#103 Clarify the shipping requirement>
+<@UOWNERDEMO>
+Check: requirements-clarification · revision: dddddddddddddddddddddddddddddddddddddddd
+Needed: Resolve these acceptance criteria: PR description: Open question: should the $100 threshold include discounts?
+Why: The supplied requirements explicitly leave behavior unresolved.
+Routing: Verified GitHub-to-Slack mappings select responsible people.
+An authorized responder must leave this single-line comment on the PR, choosing pass or fail and replacing the explanation:
+`/qa-tested check:requirements-clarification revision:dddddddddddddddddddddddddddddddddddddddd result:pass reason:Your decision and supporting explanation`
+Use result:fail if the requirement or check is not satisfied. An acknowledgment does not resolve this check. Independent automated checks continue.
+
+[MOCK GitHub] revision dddddddd status: blocked
+[REAL state] New revision dddddddddddddddddddddddddddddddddddddddd: blocked; old results and invalidated decision retained in history.
+
+Demo checks passed. Temporary synthetic data, evidence, and state are cleaned up. No external writes occurred.

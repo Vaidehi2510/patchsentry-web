@@ -1,0 +1,64 @@
+{
+  "classification": "Captured maintainer demonstration assets; not customer, live-model or independent assessment evidence",
+  "engineSource": "3f37c2f50a4d43f0b15d1c7c775c17c04b1a1458",
+  "video": {
+    "seconds": 132.52,
+    "width": 1280,
+    "height": 720,
+    "silent": true,
+    "captionCues": 8,
+    "scope": "Actual local guide/sample-UI recording; report data from real seeded fixture, UI demo illustrative"
+  },
+  "assets": [
+    {
+      "file": "ai-demo.txt",
+      "bytes": 9504,
+      "sha256": "9488c216b0b6c62e0fbb99102208c2266457814aa4f324b09f47453d60e7536c"
+    },
+    {
+      "file": "capture-provenance.json",
+      "bytes": 5391,
+      "sha256": "53e876f7ffdd09c553b7b05505f58ee466fe4887dfc09b92d44eaf50747801ef"
+    },
+    {
+      "file": "deterministic-demo.txt",
+      "bytes": 11211,
+      "sha256": "55c6777bc1d58e2d46f34c4b2d87ded30382ad151b1ba7b519f512ffeeb32f57"
+    },
+    {
+      "file": "node24-ai-demo.txt",
+      "bytes": 9466,
+      "sha256": "7a4c92a44de19a6f2fb2da60407ca58c9d37d07067ed5810d43ca0a2b8153395"
+    },
+    {
+      "file": "node24-demo.txt",
+      "bytes": 11096,
+      "sha256": "5d949cf3fefaa1948e5813bb4de308beea98c76f1604bd51ee8a926804d11e49"
+    },
+    {
+      "file": "patchsentry-walkthrough.webm",
+      "bytes": 6264867,
+      "sha256": "f8709906e3e4a1976eddfee7743529205ee087fa281dc4ee84a71c8161ac7213"
+    },
+    {
+      "file": "shipping-defect-report.md",
+      "bytes": 3803,
+      "sha256": "9b032fbc9c31809a78252283f8cf6571346588f4ef132f7ac2d1caf35030f127"
+    },
+    {
+      "file": "walkthrough-poster.png",
+      "bytes": 102597,
+      "sha256": "b62f70a67eac8bf6e2f3dd2cde7dc805faba83005e618f6ff0d47ed6aafaf5e2"
+    },
+    {
+      "file": "walkthrough-transcript.txt",
+      "bytes": 2276,
+      "sha256": "487052952dbee3bdd473b6f786b45f71a77c0febb62bc6d6ea2b91043654759b"
+    },
+    {
+      "file": "walkthrough.vtt",
+      "bytes": 1696,
+      "sha256": "930141fe8bc91ea4ff7a836c1813e65d8768ad3954af167089c7bf17eff211a2"
+    }
+  ]
+}

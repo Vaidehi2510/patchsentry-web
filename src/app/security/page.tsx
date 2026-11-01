@@ -20,7 +20,7 @@ const boundaries = [
   {
     icon: LockKeyhole,
     title: "Verified email. Password. Second factor.",
-    text: "Verify your email during signup, then choose a password and enroll email codes or a compatible authenticator app. Every new sign-in requires your password and a verified second factor.",
+    text: "Verify your email during signup, then choose a password and enroll email codes or a compatible authenticator app. New devices require your password and a verified second factor. Owners and admins complete MFA at every password login; QA engineers and viewers can explicitly remember a verified browser.",
     detail: "Verification links and email codes use the configured sender. Passwords and email codes are hashed; authenticator secrets and recovery codes are encrypted. Partial and older sessions cannot access project data.",
   },
   {
@@ -149,6 +149,9 @@ export default function SecurityPage() {
             These are product boundaries, not a compliance certification or a
             promise to detect every vulnerability. High-risk products still need
             appropriate expert review and independent security testing.
+          </p>
+          <p>
+            Report a possible vulnerability privately to <a href="mailto:patchsentry@gmail.com">patchsentry@gmail.com</a>. Read the <a href="https://github.com/Vaidehi2510/patchsentry-web/blob/main/SECURITY.md">security reporting policy</a> before sharing evidence. Maintainer handling has no guaranteed response time.
           </p>
         </div>
       </section>

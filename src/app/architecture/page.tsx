@@ -52,11 +52,13 @@ export default function Architecture() {
               provide this website’s account system.
             </p>
             <p>
-              The current website and connector do not call Ledger. Their
-              reports are stored directly through the website backend. You do
-              not need to deploy Ledger to use the current product. Connecting
-              it later requires a deliberate report API/authentication adapter;
-              simply deploying both does not connect them.
+              The hosted website Ledger records assessment versions and release
+              decisions. Its existing adapter can copy snapshots to a separately
+              deployed Java service after an operator approves its exact HTTPS
+              origin and an owner connects a scoped project token with transfer
+              consent. Java is not deployed by this project and is optional for
+              ordinary QA. Required remote acknowledgments are a separate opt-in
+              project policy; simply deploying both does not connect them.
             </p>
           </section>
           <section id="permissions">

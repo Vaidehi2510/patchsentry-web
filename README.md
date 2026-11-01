@@ -6,6 +6,25 @@ A public product website and private QA workspace for [QA-testbot](https://githu
 
 The website is the control and reporting interface. The separate QA engine executes checks in managed isolated cloud workers, or on an optional trusted private runner. It can read product source and publish PR comments, labels, and statuses; it never edits, pushes, or merges product code.
 
+## Start here: reviewers and first-time contributors
+
+[Five-minute reviewer guide](https://patchsentry.vercel.app/open-source) · [Recorded walkthrough and transcript](https://patchsentry.vercel.app/open-source#walkthrough) · [Contribution guide](CONTRIBUTING.md)
+
+The core demonstration needs **Node.js 24**, Git and npm, with no Patchsentry account, model key, Docker or product access. Dependency installation needs the public npm registry; the demo itself blocks network calls.
+
+```sh
+git clone https://github.com/Vaidehi2510/QA-testbot.git
+cd QA-testbot
+npm ci --ignore-scripts
+npm run demo
+# Optional: real tool loop with explicitly MOCKED model replies
+npm run demo:ai
+```
+
+Expected: the healthy shipping fixture passes four tests; changing `>= 100` to `> 100` produces a real failure at exactly $100 (`expected: 0`, `actual: 5`). GitHub, Slack and Drive operations are mocked. The AI demo uses mocked provider replies; neither demo evaluates a live model or sends notifications. See the [engine quick-start](https://github.com/Vaidehi2510/QA-testbot/blob/main/docs/reviewer-quickstart.md) for exact scope and expected output.
+
+The public [dashboard demo](https://patchsentry.vercel.app/demo) uses **illustrative data**, not executed customer assessments. [Award review notes](docs/award-review.md) link real reproducible evidence, known limitations and authentic contribution history. The website remains the primary project entry; the engine executes checks and Java Ledger is an optional archive.
+
 ## What is implemented
 
 - Responsive product, workflow, security, and integration documentation pages.
@@ -115,8 +134,8 @@ Tests use real Better Auth sessions and PostgreSQL-compatible storage. They cove
 
 ## Boundaries of this release
 
-- Hosted web QA is configured directly on the website: verify an encrypted OpenRouter key, choose models, save a public disposable preview and trusted goals, then request QA. No connector or customer-managed machine is required. The shared pilot permits two concurrent jobs and eight starts per month, with 15-minute workers. Model billing uses the connected OpenRouter account.
-- Email links establish inbox ownership, not repository ownership. Billing, SAML/SCIM and GitHub OAuth installation are not enabled in this beta. Password recovery retains the configured second factor and revokes existing sessions and pending login challenges.
+- Hosted web QA is configured directly on the website: verify an encrypted OpenRouter key, choose models, save a public disposable preview and trusted goals, then request QA. No connector or customer-managed machine is required. Legacy defaults retain two concurrent hosted jobs and eight starts per month, with 15-minute workers. Operator-enrolled fair scheduling adds explicit company quotas and conservative resource reservations; configuration does not establish measured cloud capacity. Model billing uses the connected OpenRouter account.
+- Email links establish inbox ownership, not repository ownership. Billing, SAML and GitHub OAuth installation are not enabled in this beta. Tenant-pinned Microsoft Entra OIDC and project-scoped SCIM Users are implemented behind owner-approved domain/identity setup; real-company interoperability remains unverified. SCIM Groups are unsupported. Password recovery retains the configured second factor and revokes existing sessions and pending login challenges.
 - Registering a repository grants no GitHub access. A project token reads its project’s settings, claims locally enrolled jobs and submits reports; it cannot read another account’s data.
 - Report scores are `floor(passed required checks / all required checks × 100)`. No required checks means no score. Failed, blocked, skipped, unsupported, and pending checks cannot count as passed. High-severity AI findings require review even when checks pass.
 - AI findings are unverified suggestions. A score is neither test coverage nor a guarantee that a product is bug-free.
@@ -126,7 +145,7 @@ Tests use real Better Auth sessions and PostgreSQL-compatible storage. They cove
 
 ## Architecture
 
-Next.js / React → Better Auth → PostgreSQL. Account APIs enforce product membership and role permissions. Separate project tokens are hashed in the database. The runner connects outbound over HTTPS; model inference and test execution stay in the QA engine’s environment. The web server never executes product PR code.
+Next.js / React → Better Auth → PostgreSQL. Account APIs enforce project membership, domain/SSO restrictions and role permissions. The backend schedules the separate engine in isolated hosted workers; the optional outbound connector handles local models, private networks and enrolled native suites. Project tokens are hashed. The Next.js server does not execute product code. The hosted assessment Ledger records versions and decisions; its existing scoped adapter can copy assessment snapshots to an optional Java service.
 
 The source is MIT licensed. Provider models, hosting, and runner infrastructure have their own terms and costs.
 
@@ -165,9 +184,9 @@ QA engineers and viewers can choose to remember a browser for 30 days after real
 
 Invitations now send through `AuthConfig.sendInvitation`, configured from the existing Gmail SMTP sender in production. The API records `accepted` only after the mail server accepts the message; it does not guarantee inbox delivery. Missing senders and unconfirmed attempts remain visible. No automatic email retry is made. A backup code is shown once; tokens remain hashed in storage, expire in seven days and are bound to the recipient's verified email. Invitation links use fragments to keep tokens out of HTTP request URLs. Recreating an invitation invalidates the previous link. `/invite` retains the token only in that browser tab until acceptance or dismissal.
 
-Owners/admins may associate a work domain with a project in My account by publishing its project-bound DNS TXT challenge at `_patchsentry.<domain>`. New challenges expire in 24 hours; verification stores a timestamp, not a permanent guarantee of domain control. This identifies the workspace, but does not enable automatic joining, SSO, custom hostnames or repository authorization. Workspace links remain private and membership checked.
+Owners/admins may associate a work domain with a project in My account by publishing its project-bound DNS TXT challenge at `_patchsentry.<domain>`. New challenges expire in 24 hours; verification stores a timestamp, not a permanent guarantee of domain control. Domain verification identifies and can restrict the workspace; it does not grant automatic membership, custom hostnames or repository authorization. Entra SSO is a separate explicit owner configuration using that verified restricted domain. Workspace links remain private and membership checked.
 
-See the public [architecture guide](https://patchsentry.vercel.app/architecture): `QA-testbot` is the runner engine; `patchsentry-web` is the website, connector and current report backend. `Patchsentry-Ledger-Java` is a separate optional Spring Boot report service. The current website and connector do not call Ledger; integrating it requires an explicit API/auth adapter. Ledger deployment is not a prerequisite for current QA runs.
+See the public [architecture guide](https://patchsentry.vercel.app/architecture): `QA-testbot` is the runner engine; `patchsentry-web` is the website, connector and current report backend. `Patchsentry-Ledger-Java` is a separate optional Spring Boot report service. The existing website adapter can connect an operator-approved HTTPS Java service using a scoped project token and explicit transfer consent. Java is not deployed by this project; hosted Ledger history and ordinary QA work independently. An owner may separately require remote acknowledgment for a qualified project gate.
 
 ## Hosted execution
 
@@ -178,3 +197,4 @@ Automatic QA, scheduled coverage reports, optional hosted Slack/email delivery a
 ## License
 
 Licensed under the [MIT License](LICENSE). Copyright (c) 2026 Vaidehi Pandya.
+For research attribution, see the engine's [CITATION.cff](https://github.com/Vaidehi2510/QA-testbot/blob/main/CITATION.cff) and record the exact commit you used.

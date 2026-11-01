@@ -133,6 +133,7 @@ export function SiteFooter() {
           <div className="footer-column">
             <span>RESOURCES</span>
             <Link href="/docs">Documentation</Link>
+            <Link href="/open-source">Open source &amp; reviewers</Link>
             <Link href="/security">Security & boundaries</Link>
             <a
               href="https://github.com/Vaidehi2510/QA-testbot"

@@ -3187,3 +3187,5 @@ img {
 .hero-copy h1 > span {
   color: #7c856f;
 }
+
+.hero-reviewer-link { margin-top: 18px; font-size: 16px; line-height: 1.6; }
