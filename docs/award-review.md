@@ -101,3 +101,13 @@ The committed VTT/transcript provides silent-video narration. Read the helper
 before running it; do not point a recorder at private accounts or products.
 
 Published [artifact hashes](../public/review/artifact-manifest.json) bind the video, captions, transcript and report derivatives. The [offline Node24 deterministic](../public/review/node24-demo.txt) and [mock-model](../public/review/node24-ai-demo.txt) outputs provide a second execution environment; they do not turn mocked responses into live inference.
+
+## Frozen review snapshot
+
+Use the annotated `ospo-2026-review` tag to inspect the published reviewer snapshot:
+[engine](https://github.com/Vaidehi2510/QA-testbot/tree/ospo-2026-review),
+[website](https://github.com/Vaidehi2510/patchsentry-web/tree/ospo-2026-review),
+[optional Java archive](https://github.com/Vaidehi2510/Patchsentry-Ledger-Java/tree/ospo-2026-review).
+See [reviewer-material verification](award-verification.md) for exact application
+revisions, CI, media checks and deployment identity. Original launch measurements
+remain separately dated and scoped; no readiness score or evidence was relabeled.

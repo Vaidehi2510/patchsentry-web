@@ -28,3 +28,9 @@ actual contracts/tests. Acceptance: give one synthetic example per supported sta
 explain required-check score versus code coverage and source/build freshness, link
 actual source/tests, and identify explicitly unknown outcomes. Review wording from
 a newcomer perspective. Do not invent new statuses or claim complete defect recall.
+
+## Published tasks
+
+- [Check the public reviewer guide with a screen reader and keyboard](https://github.com/Vaidehi2510/patchsentry-web/issues/1)
+- [Verify the no-key reviewer quick-start on Windows PowerShell](https://github.com/Vaidehi2510/QA-testbot/issues/7)
+- [Write a newcomer glossary for QA statuses and required-check scores](https://github.com/Vaidehi2510/patchsentry-web/issues/2)
